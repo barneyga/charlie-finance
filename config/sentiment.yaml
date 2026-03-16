@@ -1,0 +1,34 @@
+subreddits:
+  - name: wallstreetbets
+    series_id: SENT_REDDIT_WSB
+    display_name: "r/wallstreetbets"
+    fetch_limit: 100
+    sort: hot
+  - name: stocks
+    series_id: SENT_REDDIT_STOCKS
+    display_name: "r/stocks"
+    fetch_limit: 100
+    sort: hot
+  - name: investing
+    series_id: SENT_REDDIT_INVESTING
+    display_name: "r/investing"
+    fetch_limit: 100
+    sort: hot
+
+ticker_tracking:
+  symbols:
+    - SPY
+    - QQQ
+    - NVDA
+    - AAPL
+    - TSLA
+    - MSFT
+    - AMD
+    - AMZN
+    - META
+    - GOOG
+  series_id_prefix: "SENT_TICKER_"
+
+aggregate:
+  series_id: SENT_REDDIT_ALL
+  display_name: "Reddit Overall Sentiment"

@@ -1,0 +1,29 @@
+[project]
+name = "charlie-finance"
+version = "0.1.0"
+description = "Retail trader macro analysis toolkit"
+requires-python = ">=3.11"
+dependencies = [
+    "fredapi>=0.5.2",
+    "pandas>=2.1.0",
+    "plotly>=5.18.0",
+    "streamlit>=1.29.0",
+    "python-dotenv>=1.0.0",
+    "pyyaml>=6.0",
+    "yfinance>=0.2.36",
+    "praw>=7.7.0",
+    "vaderSentiment>=3.3.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.4.0",
+    "jupyter>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]

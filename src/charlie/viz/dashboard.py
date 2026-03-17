@@ -26,6 +26,7 @@ from charlie.analysis.stats import rolling_zscore, percentile_rank, direction_ar
 from charlie.analysis.regime import macro_regime, REGIME_COLORS
 from charlie.analysis.composite import fear_greed_score
 from charlie.analysis.calendar import get_economic_calendar
+from charlie.analysis.report import generate_weekly_report
 from charlie.analysis.sentiment import sentiment_summary, ticker_sentiment_ranking, sentiment_vs_price
 from charlie.viz.charts import (
     time_series_chart, yield_curve_snapshot, bar_chart, dual_axis_chart,
@@ -107,6 +108,7 @@ def _abbr(text: str) -> str:
 # Section definitions for navigation
 SECTIONS = {
     "Macro Overview": [
+        ("report", "Weekly Report"),
         ("regime", "Macro Regime"),
         ("calendar", "Economic Calendar"),
     ],
@@ -184,6 +186,15 @@ def _alert_badge(value: float, thresholds: dict[str, tuple[float, float]]) -> st
 
 # Section explanations
 _INFO = {
+    "report": (
+        "**What:** An auto-generated text summary of the current macro environment, "
+        "covering all 13 key areas: regime, fear/greed, yields, inflation, labor, credit, "
+        "breadth, sectors, commodities, COT positioning, put/call, currencies, and upcoming events.\n\n"
+        "**Alerts** flag any metrics at extreme levels (VIX > 25, yield curve inverted, "
+        "COT z-scores > 2.0, fear/greed extremes, etc.).\n\n"
+        "**How to use:** Scan alerts first for anything requiring attention. Then read each "
+        "section for context. Save or copy the markdown for your records."
+    ),
     "regime": (
         "**What:** Classifies the economy into 4 states — Expansion, Late Cycle, Contraction, "
         "or Recovery — based on 6 signals.\n\n"
@@ -492,6 +503,31 @@ def main():
     # MACRO OVERVIEW
     # ============================================================
     st.markdown("## Macro Overview")
+
+    # Section 0: Weekly Report
+    _anchor("report")
+    with st.expander("Weekly Report", expanded=False):
+        _section_info(_INFO["report"])
+        report = generate_weekly_report(db, fred_api_key=settings.fred_api_key or "")
+
+        if report["alerts"]:
+            st.markdown("### Alerts")
+            for alert in report["alerts"]:
+                st.markdown(f"- **{alert}**")
+            st.divider()
+
+        st.markdown(report["markdown"])
+
+        with st.expander("Copy Markdown"):
+            st.code(report["markdown"], language="markdown")
+
+        if st.button("Save Report"):
+            from pathlib import Path
+            reports_dir = Path(settings.db_path).parent.parent / "reports"
+            reports_dir.mkdir(exist_ok=True)
+            filepath = reports_dir / f"{datetime.now().strftime('%Y-%m-%d')}.md"
+            filepath.write_text(report["markdown"], encoding="utf-8")
+            st.success(f"Saved to {filepath}")
 
     # Section 1: Macro Regime Summary + Fear/Greed
     _anchor("regime")

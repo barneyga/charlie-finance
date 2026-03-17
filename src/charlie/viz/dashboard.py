@@ -625,11 +625,21 @@ def main():
                     else:
                         st.metric(name, "—")
 
-            show_all = st.checkbox("Show all releases", value=False, key="cal_show_all")
-            if show_all:
-                display_df = cal_df
-            else:
-                display_df = cal_df[cal_df["importance"].isin(["high", "medium"])]
+            fcol1, fcol2, fcol3 = st.columns(3)
+            with fcol1:
+                show_high = st.checkbox("🔴 High impact", value=True, key="cal_high")
+            with fcol2:
+                show_medium = st.checkbox("🟡 Medium impact", value=False, key="cal_medium")
+            with fcol3:
+                show_low = st.checkbox("⚪ Low impact", value=False, key="cal_low")
+            selected = []
+            if show_high:
+                selected.append("high")
+            if show_medium:
+                selected.append("medium")
+            if show_low:
+                selected.append("low")
+            display_df = cal_df[cal_df["importance"].isin(selected)] if selected else cal_df.head(0)
 
             importance_map = {"high": "🔴", "medium": "🟡", "low": "⚪"}
             styled = display_df.copy()

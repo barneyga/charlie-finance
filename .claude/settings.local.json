@@ -8,7 +8,14 @@
       "Bash(python -c \":*)",
       "Bash(python:*)",
       "Bash(cd:*)",
-      "Bash(setx:*)"
+      "Bash(setx:*)",
+      "WebSearch",
+      "Bash(grep -rn \"put\\\\|call\\\\|option\\\\|PCERATIO\" C:UsersGNathOneDriveDesktopcharlie-finance --include=*.py --include=*.yaml --include=*.md)",
+      "WebFetch(domain:www.cboe.com)",
+      "Bash(find C:UsersGNathOneDriveDesktopcharlie-finance -type f -name *cot* -o -name *CFTC*)",
+      "WebFetch(domain:publicreporting.cftc.gov)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }

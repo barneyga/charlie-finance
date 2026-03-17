@@ -1,4 +1,5 @@
 """Derived macro indicators from raw FRED data."""
+import numpy as np
 import pandas as pd
 
 from charlie.storage.db import Database
@@ -310,3 +311,356 @@ def etf_flow_by_category(db: Database) -> pd.DataFrame:
 
     grouped = summary.groupby("Category")[["1W Net ($M)", "1M Net ($M)"]].sum()
     return grouped.reset_index().sort_values("1M Net ($M)", ascending=False)
+
+
+# ── Crown Macro Signal Functions ────────────────────────────────
+
+
+def vix_vs_realized_vol(db: Database) -> dict:
+    """VIX minus realized volatility — complacency when negative.
+
+    Returns dict with: vix, realized_vol, premium, premium_zscore, signal,
+    history (DataFrame with VIX, Realized, Premium columns).
+    """
+    vix = query_series(db, "VIXCLS")
+    spy = query_series(db, "SPY")
+
+    if vix.empty or spy.empty:
+        return {"available": False}
+
+    # Realized vol: 21-day rolling std of daily returns, annualized
+    spy_ret = spy.pct_change().dropna()
+    realized = spy_ret.rolling(21, min_periods=15).std() * np.sqrt(252) * 100
+    realized.name = "Realized Vol"
+
+    # Align on common dates
+    df = pd.DataFrame({"VIX": vix, "Realized": realized}).dropna()
+    if df.empty or len(df) < 30:
+        return {"available": False}
+
+    df["Premium"] = df["VIX"] - df["Realized"]
+
+    current_vix = float(df["VIX"].iloc[-1])
+    current_rv = float(df["Realized"].iloc[-1])
+    premium = float(df["Premium"].iloc[-1])
+
+    # Z-score of premium over 252-day window
+    from charlie.analysis.stats import rolling_zscore
+    prem_z = rolling_zscore(df["Premium"], 252)
+    z_val = float(prem_z.iloc[-1]) if not prem_z.empty else 0.0
+
+    # Signal classification
+    if premium < 0:
+        signal = "complacency"
+    elif premium < 5:
+        signal = "normal"
+    elif premium < 8:
+        signal = "elevated"
+    else:
+        signal = "fear_overshoot"
+
+    return {
+        "available": True,
+        "vix": current_vix,
+        "realized_vol": current_rv,
+        "premium": premium,
+        "premium_zscore": z_val,
+        "signal": signal,
+        "history": df,
+    }
+
+
+def breadth_above_200d_ma(db: Database) -> dict:
+    """Percentage of tracked ETFs above their 200-day moving average.
+
+    Uses 15 ETFs already in DB as a proxy for market breadth.
+
+    Returns dict with: current_pct, above_count, total_count, detail (list),
+    history (Series), signal.
+    """
+    etfs = {
+        "XLF": "Financials", "XLE": "Energy", "XLK": "Technology",
+        "XLV": "Healthcare", "XLU": "Utilities", "XLB": "Materials",
+        "XLI": "Industrials", "XLY": "Cons. Discr.",
+        "XLP": "Cons. Staples", "XLC": "Comm. Svcs.", "XLRE": "Real Estate",
+        "SPY": "S&P 500", "QQQ": "Nasdaq 100", "IWM": "Russell 2000",
+        "RSP": "S&P Equal Wt",
+    }
+
+    detail = []
+    # For historical time series, track daily above/below per ETF
+    above_ts: dict[str, pd.Series] = {}
+
+    for sym, name in etfs.items():
+        s = query_series(db, sym)
+        if s.empty or len(s) < 200:
+            continue
+        ma200 = s.rolling(200).mean()
+        current_price = float(s.iloc[-1])
+        current_ma = float(ma200.iloc[-1])
+        pct_from_ma = ((current_price / current_ma) - 1) * 100
+
+        is_above = current_price > current_ma
+        detail.append({
+            "Symbol": sym,
+            "Name": name,
+            "Price": current_price,
+            "200d MA": current_ma,
+            "% from MA": round(pct_from_ma, 1),
+            "Above": is_above,
+        })
+
+        # Historical: 1 if above 200d MA, 0 if below
+        above_series = (s > ma200).astype(float)
+        above_ts[sym] = above_series
+
+    if not detail:
+        return {"available": False}
+
+    above_count = sum(1 for d in detail if d["Above"])
+    total_count = len(detail)
+    current_pct = (above_count / total_count) * 100
+
+    # Historical time series of % above 200d MA
+    if above_ts:
+        above_df = pd.DataFrame(above_ts).dropna()
+        if not above_df.empty:
+            history = above_df.mean(axis=1) * 100
+            history.name = "pct_above_200d"
+        else:
+            history = pd.Series(dtype=float)
+    else:
+        history = pd.Series(dtype=float)
+
+    # Signal classification
+    if current_pct >= 80:
+        signal = "strong"
+    elif current_pct >= 60:
+        signal = "healthy"
+    elif current_pct >= 40:
+        signal = "weakening"
+    else:
+        signal = "critical"
+
+    return {
+        "available": True,
+        "current_pct": current_pct,
+        "above_count": above_count,
+        "total_count": total_count,
+        "detail": sorted(detail, key=lambda d: d["% from MA"], reverse=True),
+        "history": history,
+        "signal": signal,
+    }
+
+
+def exhaustion_signal(
+    db: Database,
+    api_key: str,
+    releases: list | tuple,
+) -> dict:
+    """'Good News Stops Working' — market exhaustion detection.
+
+    Checks SPY reaction to high-importance economic releases. If markets
+    sell off on good news, the move is exhausted.
+
+    Returns dict with: score, count_negative, count_total,
+    events (list of {date, name, spy_return}), signal.
+    """
+    from charlie.analysis.calendar import get_past_release_dates
+
+    if not api_key:
+        return {"available": False}
+
+    # Get past release dates for high-importance releases
+    high_releases = [r for r in releases if r.importance == "high"]
+    if not high_releases:
+        return {"available": False}
+
+    past_events = get_past_release_dates(api_key, high_releases, days_back=180)
+
+    spy = query_series(db, "SPY")
+    if spy.empty or not past_events:
+        return {"available": False}
+
+    # Compute SPY daily returns
+    spy_ret = spy.pct_change() * 100
+
+    events = []
+    for ev in past_events[-15:]:  # Last 15 events
+        dt = pd.Timestamp(ev["date"])
+        # Find nearest trading day return
+        idx = spy_ret.index.get_indexer([dt], method="nearest")[0]
+        if idx >= 0 and idx < len(spy_ret):
+            ret = float(spy_ret.iloc[idx])
+            events.append({
+                "date": ev["date"],
+                "name": ev["name"],
+                "spy_return": round(ret, 2),
+            })
+
+    if not events:
+        return {"available": False}
+
+    # Score: fraction of last 10 releases with negative SPY returns
+    recent = events[-10:] if len(events) >= 10 else events
+    count_neg = sum(1 for e in recent if e["spy_return"] < 0)
+    count_total = len(recent)
+    score = count_neg / count_total if count_total > 0 else 0.0
+
+    if score < 0.4:
+        signal = "normal"
+    elif score < 0.6:
+        signal = "caution"
+    else:
+        signal = "exhaustion"
+
+    return {
+        "available": True,
+        "score": score,
+        "count_negative": count_neg,
+        "count_total": count_total,
+        "events": events,
+        "signal": signal,
+    }
+
+
+# COT-to-price mapping for crowded trade detection
+COT_PRICE_MAP = {
+    "COT_ES": "SPY",
+    "COT_NQ": "QQQ",
+    "COT_GC": "GLD",
+    "COT_CL": "USO",
+    "COT_ZN": "TLT",
+    "COT_EC": "EFA",  # Euro FX proxy
+}
+
+
+def crowded_trade_unwind(db: Database, z_threshold: float = 2.0) -> list[dict]:
+    """Detect crowded trade unwinding — extreme positioning + adverse price action.
+
+    Compound signal: COT z-score > threshold AND price below 20d MA (for longs)
+    or COT z-score < -threshold AND price above 20d MA (for shorts).
+
+    Returns list of dicts per contract with: contract, prefix, z_score, direction,
+    price_vs_ma_pct, unwinding, signal_type.
+    """
+    from charlie.analysis.stats import rolling_zscore
+
+    results = []
+    for prefix, name in COT_CONTRACTS.items():
+        pct = query_series(db, f"{prefix}_PCT")
+        price_sym = COT_PRICE_MAP.get(prefix)
+        if pct.empty or not price_sym:
+            continue
+
+        price = query_series(db, price_sym)
+        if price.empty or len(price) < 20:
+            continue
+
+        z = rolling_zscore(pct, 52)
+        if z.empty:
+            continue
+
+        z_val = float(z.iloc[-1])
+        current_price = float(price.iloc[-1])
+        ma20 = float(price.rolling(20).mean().iloc[-1])
+        price_vs_ma_pct = ((current_price / ma20) - 1) * 100
+
+        unwinding = False
+        signal_type = "none"
+
+        if z_val > z_threshold and current_price < ma20:
+            unwinding = True
+            signal_type = "crowded_long_unwinding"
+        elif z_val < -z_threshold and current_price > ma20:
+            unwinding = True
+            signal_type = "crowded_short_squeeze"
+
+        results.append({
+            "contract": name,
+            "prefix": prefix,
+            "price_symbol": price_sym,
+            "z_score": round(z_val, 2),
+            "direction": "long" if z_val > 0 else "short",
+            "price_vs_ma_pct": round(price_vs_ma_pct, 1),
+            "unwinding": unwinding,
+            "signal_type": signal_type,
+        })
+
+    return results
+
+
+# Sector ETF symbols for rank reversal detection
+_SECTOR_ETFS = {
+    "XLF": "Financials", "XLE": "Energy", "XLK": "Technology",
+    "XLV": "Healthcare", "XLU": "Utilities", "XLB": "Materials",
+    "XLI": "Industrials", "XLY": "Cons. Discr.",
+    "XLP": "Cons. Staples", "XLC": "Comm. Svcs.", "XLRE": "Real Estate",
+}
+
+
+def sector_rank_reversal(db: Database, window: int = 63) -> dict:
+    """Detect 'Factory Reset' — major sector rank reversals over a quarter.
+
+    Compares sector return rankings now vs one quarter ago.
+    Flags sectors with |rank_change| >= 5.
+
+    Returns dict with: reversals (list), has_reversal (bool),
+    current_rankings (dict), previous_rankings (dict), details (list).
+    """
+    current_rets = {}
+    prev_rets = {}
+
+    for sym in _SECTOR_ETFS:
+        s = query_series(db, sym)
+        if s.empty or len(s) < window * 2 + 1:
+            continue
+
+        # Current quarter return (last 63 trading days)
+        current_rets[sym] = ((s.iloc[-1] / s.iloc[-window - 1]) - 1) * 100
+
+        # Previous quarter return (63d before that)
+        prev_rets[sym] = ((s.iloc[-window - 1] / s.iloc[-2 * window - 1]) - 1) * 100
+
+    if len(current_rets) < 5:
+        return {"available": False}
+
+    # Rank (1=best, N=worst)
+    curr_sorted = sorted(current_rets.items(), key=lambda x: x[1], reverse=True)
+    prev_sorted = sorted(prev_rets.items(), key=lambda x: x[1], reverse=True)
+
+    curr_rank = {sym: i + 1 for i, (sym, _) in enumerate(curr_sorted)}
+    prev_rank = {sym: i + 1 for i, (sym, _) in enumerate(prev_sorted)}
+
+    details = []
+    reversals = []
+    for sym in current_rets:
+        name = _SECTOR_ETFS[sym]
+        cr = curr_rank.get(sym, 0)
+        pr = prev_rank.get(sym, 0)
+        rank_change = pr - cr  # positive = improved (moved up)
+
+        entry = {
+            "symbol": sym,
+            "name": name,
+            "current_rank": cr,
+            "previous_rank": pr,
+            "rank_change": rank_change,
+            "current_return": round(current_rets[sym], 1),
+            "previous_return": round(prev_rets.get(sym, 0), 1),
+        }
+        details.append(entry)
+
+        if abs(rank_change) >= 5:
+            reversals.append(entry)
+
+    details.sort(key=lambda d: d["current_rank"])
+
+    return {
+        "available": True,
+        "reversals": reversals,
+        "has_reversal": len(reversals) > 0,
+        "current_rankings": curr_rank,
+        "previous_rankings": prev_rank,
+        "details": details,
+    }

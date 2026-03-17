@@ -93,6 +93,15 @@ metrics:
     yellow: [20, 40]
     green: [40, null]
 
+  vix_premium:
+    series_id: _derived
+    name: "VIX Premium"
+    description: "VIX minus realized vol — complacency when negative"
+    direction: below
+    green: [3, null]
+    yellow: [0, 3]
+    red: [null, 0]
+
   fear_greed_greed:
     series_id: _composite
     name: "Extreme Greed"

@@ -60,6 +60,13 @@ def _resolve_value(db: Database, threshold: AlertThreshold) -> float | None:
                 return None
             return float(tbl["Z-Score"].abs().max())
 
+        if mid == "vix_premium":
+            from charlie.analysis.derived import vix_vs_realized_vol
+            result = vix_vs_realized_vol(db)
+            if result.get("available"):
+                return result["premium"]
+            return None
+
         if mid in ("fear_greed_fear", "fear_greed_greed"):
             from charlie.analysis.composite import fear_greed_score
             result = fear_greed_score(db)

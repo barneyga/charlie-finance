@@ -22,7 +22,10 @@ from charlie.analysis.derived import (
     stock_bond_correlation, spy_rsp_spread, sector_returns,
     cot_summary_table, COT_CONTRACTS,
     etf_flow_summary, etf_flow_by_category,
+    vix_vs_realized_vol, breadth_above_200d_ma,
+    exhaustion_signal, crowded_trade_unwind, sector_rank_reversal,
 )
+from charlie.analysis.insights import generate_insights
 from charlie.analysis.stats import rolling_zscore, percentile_rank, direction_arrow
 from charlie.analysis.regime import macro_regime, REGIME_COLORS
 from charlie.analysis.composite import fear_greed_score
@@ -110,6 +113,7 @@ def _abbr(text: str) -> str:
 # Section definitions for navigation
 SECTIONS = {
     "Macro Overview": [
+        ("insights", "Crown Insights"),
         ("report", "Weekly Report"),
         ("alerts", "Alert History"),
         ("regime", "Macro Regime"),
@@ -147,6 +151,7 @@ _METRIC_TO_SECTION = {
     "cpi_yoy": "inflation", "unemployment": "labor",
     "gold_silver": "metals", "put_call": "credit",
     "cot_z": "cot", "fear_greed_fear": "regime", "fear_greed_greed": "regime",
+    "vix_premium": "credit",
 }
 
 
@@ -413,6 +418,15 @@ _INFO = {
         "**BTC:** Risk/liquidity barometer. Correlates with risk-on assets, inversely with real "
         "rates. Not a hedge — more like leveraged risk appetite."
     ),
+    "insights": (
+        "**What:** Auto-generated macro signal cards in the style of Crown's Macro Letter.\n\n"
+        "**6 scanners** run on every load: cross-asset divergences, breadth warnings (Sleight of Hand), "
+        "crowded trade unwinding, sector rank reversals (Factory Reset), market exhaustion "
+        "(Good News Stops Working), and VIX complacency.\n\n"
+        "**How to read:** Cards are ranked by severity. Each card explains what's happening, why it "
+        "matters, what to watch for next, and the risk if the signal is wrong. Click the section link "
+        "to dive deeper into the underlying data."
+    ),
     "sentiment": (
         "**What:** Social media sentiment from Reddit and StockTwits.\n\n"
         "**Reddit:** r/wallstreetbets, r/stocks, r/investing. Posts scored using VADER "
@@ -517,7 +531,7 @@ def main():
 
     # Expand-all toggle + smart-collapse helper
     expand_all_toggle = st.sidebar.checkbox("Expand all sections", value=False)
-    _always_expand = {"regime", "calendar"}
+    _always_expand = {"insights", "regime", "calendar"}
 
     def _should_expand(section_id: str) -> bool:
         if screenshot_mode or expand_all_toggle:
@@ -676,6 +690,65 @@ def main():
     # ============================================================
     st.markdown("## Macro Overview")
 
+    # Section: Crown Insights (auto-generated signal cards)
+    _anchor("insights")
+    with st.expander("Crown Insights", expanded=_should_expand("insights")):
+        _section_info(_INFO["insights"])
+
+        @st.cache_data(ttl=3600)
+        def _load_insights(_api_key, _releases_hash):
+            return generate_insights(db, api_key=_api_key, releases=settings.calendar_releases)
+
+        _releases_hash = hash(tuple(r.id for r in settings.calendar_releases))
+        insight_cards = _load_insights(settings.fred_api_key or "", _releases_hash)
+
+        if insight_cards:
+            for card in insight_cards:
+                # Color based on severity
+                if card.severity >= 0.7:
+                    border_color = "#ef4444"  # red
+                elif card.severity >= 0.4:
+                    border_color = "#fbbf24"  # yellow
+                else:
+                    border_color = "#3b82f6"  # blue
+
+                _type_emoji = {
+                    "DIVERGENCE": "📐", "BREADTH": "🎩", "CROWDED_TRADE": "🎯",
+                    "REGIME_SHIFT": "🔄", "EXHAUSTION": "🔋", "COMPLACENCY": "😴",
+                }.get(card.signal_type, "📊")
+
+                st.markdown(
+                    f"<div style='border-left:4px solid {border_color}; padding:8px 16px; "
+                    f"margin-bottom:12px; background:rgba(255,255,255,0.03); border-radius:4px'>"
+                    f"<span style='font-size:0.8em; color:{border_color}'>"
+                    f"{_type_emoji} {card.signal_type}</span> &nbsp; "
+                    f"<span style='font-size:0.8em; color:#888'>({card.crown_term})</span><br>"
+                    f"<strong style='font-size:1.1em'>{card.headline}</strong>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+                grid = st.columns(2)
+                with grid[0]:
+                    st.markdown(f"**What's happening:** {card.whats_happening}")
+                    st.markdown(f"**What to watch:** {card.what_to_watch}")
+                with grid[1]:
+                    st.markdown(f"**Why it matters:** {card.why_it_matters}")
+                    st.markdown(f"**Risk if wrong:** {card.risk_if_wrong}")
+
+                # Link to relevant section
+                section_name = {
+                    sid: name for group in SECTIONS.values() for sid, name in group
+                }.get(card.section_link, card.section_link)
+                st.markdown(
+                    f"<a href='#{card.section_link}' style='color:{border_color}; text-decoration:none'>"
+                    f"📊 See details in {section_name}</a>",
+                    unsafe_allow_html=True,
+                )
+                st.divider()
+        else:
+            st.info("No active Crown signals detected — all scanners clear.")
+
     # Section 0: Weekly Report
     _anchor("report")
     with st.expander("Weekly Report", expanded=_should_expand("report")):
@@ -807,6 +880,44 @@ def main():
         if signal_rows:
             st.subheader("Regime Signals")
             st.dataframe(pd.DataFrame(signal_rows), hide_index=True, width="stretch")
+
+        # --- Good News Stops Working (Crown signal) ---
+        try:
+            @st.cache_data(ttl=3600)
+            def _load_exhaustion(_api_key, _releases_hash):
+                return exhaustion_signal(db, _api_key, settings.calendar_releases)
+
+            _exh_hash = hash(tuple(r.id for r in settings.calendar_releases))
+            exh = _load_exhaustion(settings.fred_api_key or "", _exh_hash)
+            if exh.get("available"):
+                st.subheader("Good News Stops Working")
+                _exh_sig = exh["signal"]
+                _exh_colors = {"normal": "#22c55e", "caution": "#fbbf24", "exhaustion": "#ef4444"}
+                exh_c1, exh_c2, exh_c3 = st.columns(3)
+                with exh_c1:
+                    st.metric("Negative Reactions", f"{exh['count_negative']}/{exh['count_total']}")
+                with exh_c2:
+                    st.metric("Exhaustion Score", f"{exh['score']:.0%}")
+                with exh_c3:
+                    st.markdown(
+                        f"<span style='color:{_exh_colors.get(_exh_sig, '#888')}; font-size:1.3em; font-weight:bold'>"
+                        f"{_exh_sig.title()}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                if exh["events"]:
+                    ev_rows = []
+                    for ev in reversed(exh["events"][-10:]):
+                        ret = ev["spy_return"]
+                        badge = "🟢" if ret > 0 else "🔴"
+                        ev_rows.append({
+                            "Date": ev["date"],
+                            "Release": ev["name"],
+                            "SPY Return": f"{badge} {ret:+.2f}%",
+                        })
+                    st.dataframe(pd.DataFrame(ev_rows), hide_index=True, width="stretch")
+        except Exception:
+            pass
 
     # Section 2: Economic Calendar
     _anchor("calendar")
@@ -1083,6 +1194,44 @@ def main():
                     width="stretch",
                 )
 
+        # --- VIX vs Realized Volatility (Crown signal) ---
+        try:
+            vix_rv = vix_vs_realized_vol(db)
+            if vix_rv.get("available"):
+                st.subheader("VIX vs Realized Volatility")
+                vrv_m1, vrv_m2, vrv_m3 = st.columns(3)
+                with vrv_m1:
+                    st.metric("VIX (Implied)", f"{vix_rv['vix']:.1f}")
+                with vrv_m2:
+                    st.metric("Realized Vol (21d)", f"{vix_rv['realized_vol']:.1f}")
+                with vrv_m3:
+                    _prem = vix_rv["premium"]
+                    _sig = vix_rv["signal"]
+                    _sig_colors = {"complacency": "#ef4444", "normal": "#22c55e", "elevated": "#fbbf24", "fear_overshoot": "#ef4444"}
+                    _sig_label = _sig.replace("_", " ").title()
+                    _prem_badge = _alert_badge(_prem, _THRESHOLDS.get("vix_premium", {"green": (3, float("inf")), "yellow": (0, 3), "red": (float("-inf"), 0)}))
+                    st.metric(f"{_prem_badge} VIX Premium", f"{_prem:+.1f}")
+                    st.markdown(
+                        f"<span style='color:{_sig_colors.get(_sig, '#888')}'>{_sig_label}</span>",
+                        unsafe_allow_html=True,
+                    )
+
+                # Dual-axis chart: VIX + Realized lines, premium as area
+                hist = vix_rv["history"]
+                if not hist.empty:
+                    hist_f = hist.loc[start_date:end_date] if start_date else hist
+                    if not hist_f.empty:
+                        fig = dual_axis_chart(
+                            hist_f["VIX"], hist_f["Premium"],
+                            "VIX vs Realized Vol & Premium",
+                            y1_title="VIX / Realized Vol", y2_title="Premium",
+                        )
+                        fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,0,0,0.4)",
+                                      annotation_text="Complacency line", yref="y2")
+                        st.plotly_chart(fig, width="stretch")
+        except Exception:
+            pass
+
         pcr_col1, pcr_col2 = st.columns(2)
 
         with pcr_col1:
@@ -1222,6 +1371,49 @@ def main():
                         horizontal_bar_chart(idx_returns, "Index Returns (Period)"),
                         width="stretch",
                     )
+            # --- Breadth: % Above 200d MA (Crown signal) ---
+            try:
+                b200 = breadth_above_200d_ma(db)
+                if b200.get("available"):
+                    st.subheader("Breadth: % Above 200d MA")
+
+                    _sig_colors_b = {"strong": "#22c55e", "healthy": "#86efac", "weakening": "#fbbf24", "critical": "#ef4444"}
+                    _sig_label_b = b200["signal"].title()
+                    _sig_color_b = _sig_colors_b.get(b200["signal"], "#888")
+
+                    bb1, bb2, bb3 = st.columns(3)
+                    with bb1:
+                        st.metric("ETFs Above 200d MA", f"{b200['above_count']}/{b200['total_count']}")
+                    with bb2:
+                        st.metric("Breadth %", f"{b200['current_pct']:.0f}%")
+                    with bb3:
+                        st.markdown(
+                            f"<span style='color:{_sig_color_b}; font-size:1.3em; font-weight:bold'>"
+                            f"{_sig_label_b}</span>",
+                            unsafe_allow_html=True,
+                        )
+
+                    # Horizontal bar chart: % distance from 200d MA per ETF
+                    if b200["detail"]:
+                        bar_data = {d["Symbol"]: d["% from MA"] for d in b200["detail"]}
+                        st.plotly_chart(
+                            horizontal_bar_chart(bar_data, "Distance from 200d MA (%)"),
+                            width="stretch",
+                        )
+
+                    # Historical time series
+                    if not b200["history"].empty:
+                        bh = b200["history"].loc[start_date:end_date]
+                        if not bh.empty:
+                            bh.name = "% Above 200d MA"
+                            fig = time_series_chart(bh, "Historical Breadth: % Above 200d MA", yaxis_title="%")
+                            fig.add_hline(y=80, line_dash="dot", line_color="#22c55e", annotation_text="Strong")
+                            fig.add_hline(y=40, line_dash="dot", line_color="#ef4444", annotation_text="Critical")
+                            fig.add_hline(y=60, line_dash="dash", line_color="rgba(255,255,255,0.2)")
+                            st.plotly_chart(fig, width="stretch")
+            except Exception:
+                pass
+
         else:
             st.info("No market data loaded. Click **Refresh Market Data** in the sidebar.")
 
@@ -1229,10 +1421,41 @@ def main():
     _anchor("sectors")
     with st.expander("Sector Scorecard", expanded=_should_expand("sectors")):
         _section_info(_INFO["sectors"])
+
+        # --- Factory Reset banner (Crown signal) ---
+        try:
+            srr = sector_rank_reversal(db)
+            if srr.get("available") and srr["has_reversal"]:
+                for rv in srr["reversals"]:
+                    direction = "surged" if rv["rank_change"] > 0 else "collapsed"
+                    arrow = "+" if rv["rank_change"] > 0 else ""
+                    st.warning(
+                        f"🔄 **Factory Reset:** {rv['name']} ({rv['symbol']}) {direction} "
+                        f"#{rv['previous_rank']} -> #{rv['current_rank']} "
+                        f"(Rank {arrow}{rv['rank_change']})"
+                    )
+        except Exception:
+            srr = {"available": False}
+
         sec_df = sector_returns(db)
         if not sec_df.empty:
+            # Add Rank Delta column if factory reset data available
+            if srr.get("available") and srr.get("details"):
+                rank_delta_map = {}
+                for d in srr["details"]:
+                    name = d["name"]
+                    rc = d["rank_change"]
+                    if rc > 0:
+                        rank_delta_map[name] = f"+{rc}"
+                    elif rc < 0:
+                        rank_delta_map[name] = str(rc)
+                    else:
+                        rank_delta_map[name] = "—"
+                sec_df["Rank Chg"] = sec_df.index.map(lambda x: rank_delta_map.get(x, "—"))
+
             value_cols = [c for c in ["1W", "1M", "3M", "YTD"] if c in sec_df.columns]
-            display_df = sec_df[["Symbol"] + value_cols].sort_values("1M", ascending=False)
+            extra_cols = ["Rank Chg"] if "Rank Chg" in sec_df.columns else []
+            display_df = sec_df[["Symbol"] + value_cols + extra_cols].sort_values("1M", ascending=False)
 
             def _color_cell(v):
                 if pd.isna(v):
@@ -1426,6 +1649,20 @@ def main():
     _anchor("cot")
     with st.expander("COT Positioning", expanded=_should_expand("cot")):
         _section_info(_INFO["cot"])
+
+        # --- Crowded Trade Unwinding banner (Crown signal) ---
+        try:
+            ctu = crowded_trade_unwind(db)
+            unwinding = [r for r in ctu if r["unwinding"]]
+            if unwinding:
+                for uw in unwinding:
+                    _sig_type = "Long Unwinding" if uw["signal_type"] == "crowded_long_unwinding" else "Short Squeeze"
+                    st.warning(
+                        f"🎯 **Crowded Trade Alert:** {uw['contract']} — {_sig_type} "
+                        f"(z-score: {uw['z_score']:+.2f}, price {uw['price_vs_ma_pct']:+.1f}% vs 20d MA)"
+                    )
+        except Exception:
+            pass
 
         cot_table = cot_summary_table(db)
         if cot_table.empty:

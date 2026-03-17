@@ -84,6 +84,40 @@ def get_economic_calendar(
     return df
 
 
+def get_past_release_dates(
+    api_key: str,
+    releases: tuple[CalendarRelease, ...] | list[CalendarRelease],
+    days_back: int = 180,
+) -> list[dict]:
+    """Fetch past release dates for high-importance releases.
+
+    Returns list of dicts with: date, name, importance — sorted by date asc.
+    Used by the 'Good News Stops Working' exhaustion signal.
+    """
+    today = date.today()
+    start = (today - timedelta(days=days_back)).isoformat()
+    end = today.isoformat()
+
+    rows = []
+    for rel in releases:
+        if rel.fixed_dates:
+            dates = [d for d in rel.fixed_dates if start <= d <= end]
+        elif rel.id > 0:
+            dates = fetch_release_dates(api_key, rel.id, start, end)
+        else:
+            dates = []
+
+        for d in dates:
+            rows.append({
+                "date": d,
+                "name": rel.name,
+                "importance": rel.importance,
+            })
+
+    rows.sort(key=lambda r: r["date"])
+    return rows
+
+
 def get_next_release(
     api_key: str,
     releases: tuple[CalendarRelease, ...] | list[CalendarRelease],

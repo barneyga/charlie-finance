@@ -108,6 +108,52 @@ def gold_silver_ratio(db: Database) -> pd.Series:
     return ratio.dropna()
 
 
+def gold_copper_ratio(db: Database) -> pd.Series:
+    """GLD / COPX ratio. Rising = safe haven outperforming cyclical metal (risk-off)."""
+    df = query_multiple_series(db, ["GLD", "COPX"])
+    if df.empty or "GLD" not in df.columns or "COPX" not in df.columns:
+        return pd.Series(dtype=float)
+    ratio = df["GLD"] / df["COPX"]
+    ratio.name = "gold_copper_ratio"
+    return ratio.dropna()
+
+
+def gold_real_yield_divergence(db: Database, window: int = 63) -> pd.Series:
+    """Rolling correlation of gold returns vs real yield changes.
+
+    Normally negative (gold falls when real rates rise). When correlation
+    turns positive, gold is rising DESPITE rising real rates = stress signal.
+    """
+    rr = real_rate(db)
+    gld = query_series(db, "GLD")
+    if rr.empty or gld.empty:
+        return pd.Series(dtype=float)
+
+    gld_ret = gld.pct_change().dropna()
+    rr_chg = rr.diff().dropna()
+
+    # Align
+    aligned = pd.DataFrame({"gld_ret": gld_ret, "rr_chg": rr_chg}).dropna()
+    if len(aligned) < window:
+        return pd.Series(dtype=float)
+
+    corr = aligned["gld_ret"].rolling(window, min_periods=30).corr(aligned["rr_chg"])
+    corr.name = "gold_real_yield_corr"
+    return corr.dropna()
+
+
+def gold_momentum(db: Database) -> pd.Series:
+    """GLD 50d/200d MA ratio. Rising gold trend = safe haven demand."""
+    gld = query_series(db, "GLD")
+    if gld.empty or len(gld) < 200:
+        return pd.Series(dtype=float)
+    ma50 = gld.rolling(50).mean()
+    ma200 = gld.rolling(200).mean()
+    momentum = ma50 / ma200 * 100
+    momentum.name = "gold_momentum"
+    return momentum.dropna()
+
+
 def oil_gold_ratio(db: Database) -> pd.Series:
     """WTI Crude / GLD ratio. Rising = growth/risk-on, falling = stagflation risk."""
     df = query_multiple_series(db, ["DCOILWTICO", "GLD"])

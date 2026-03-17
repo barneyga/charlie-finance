@@ -6,6 +6,7 @@ from charlie.storage.models import query_series
 from charlie.analysis.derived import (
     hy_ig_spread, spy_rsp_spread, stock_bond_correlation,
     gold_silver_ratio, yield_curve_spread,
+    gold_copper_ratio, gold_real_yield_divergence, gold_momentum,
 )
 from charlie.analysis.stats import percentile_rank
 
@@ -34,6 +35,96 @@ def _compute_component(
     if invert:
         pct = 100 - pct
     return pct
+
+
+def _safe_haven_subcomposite(db: Database, window: int = 756) -> dict:
+    """Multi-signal safe haven sub-composite using 3-year percentile window.
+
+    Combines 5 sub-signals to produce a more robust safe-haven reading than
+    the single gold/silver ratio. Each sub-signal is percentile-ranked
+    independently, then averaged.
+
+    Returns dict with: available, score, num_signals, raw_components, history.
+    """
+    sub_signals = {}
+    sub_raw = {}
+
+    # 1. Gold/Silver Ratio — classic safe-haven rotation
+    try:
+        gsr = gold_silver_ratio(db)
+        if len(gsr) >= 60:
+            pct = _compute_component(gsr, window=window)
+            sub_signals["Gold/Silver"] = pct
+            sub_raw["Gold/Silver"] = {"raw_value": round(float(gsr.iloc[-1]), 2)}
+    except Exception:
+        pass
+
+    # 2. Gold/Copper Ratio — safe haven vs cyclical metal
+    try:
+        gcr = gold_copper_ratio(db)
+        if len(gcr) >= 60:
+            pct = _compute_component(gcr, window=window)
+            sub_signals["Gold/Copper"] = pct
+            sub_raw["Gold/Copper"] = {"raw_value": round(float(gcr.iloc[-1]), 2)}
+    except Exception:
+        pass
+
+    # 3. Gold vs Real Yield Divergence — positive corr = stress
+    try:
+        div = gold_real_yield_divergence(db)
+        if len(div) >= 60:
+            pct = _compute_component(div, window=window)
+            sub_signals["Gold/Real Yield"] = pct
+            sub_raw["Gold/Real Yield"] = {"raw_value": round(float(div.iloc[-1]), 3)}
+    except Exception:
+        pass
+
+    # 4. Gold Momentum — strong gold trend = haven demand
+    try:
+        gm = gold_momentum(db)
+        if len(gm) >= 60:
+            pct = _compute_component(gm, window=window)
+            sub_signals["Gold Momentum"] = pct
+            sub_raw["Gold Momentum"] = {"raw_value": round(float(gm.iloc[-1]), 2)}
+    except Exception:
+        pass
+
+    # 5. TLT Momentum — treasury flight to safety
+    try:
+        tlt = query_series(db, "TLT")
+        if len(tlt) >= 200:
+            ma50 = tlt.rolling(50).mean()
+            ma200 = tlt.rolling(200).mean()
+            tlt_mom = ma50 / ma200 * 100
+            tlt_mom.name = "tlt_momentum"
+            pct = _compute_component(tlt_mom, window=window)
+            sub_signals["TLT Momentum"] = pct
+            sub_raw["TLT Momentum"] = {"raw_value": round(float(tlt_mom.iloc[-1]), 2)}
+    except Exception:
+        pass
+
+    if len(sub_signals) < 2:
+        return {"available": False}
+
+    # Add scores to raw_components
+    for name, pct_series in sub_signals.items():
+        sub_raw[name]["score"] = round(float(pct_series.iloc[-1]), 1)
+
+    # Average score
+    score = sum(sub_raw[n]["score"] for n in sub_signals) / len(sub_signals)
+
+    # Build history series (aligned average of all sub-signal percentiles)
+    aligned = pd.DataFrame(sub_signals).dropna()
+    history = aligned.mean(axis=1) if not aligned.empty else pd.Series(dtype=float)
+    history.name = "safe_haven_subcomposite"
+
+    return {
+        "available": True,
+        "score": round(score, 1),
+        "num_signals": len(sub_signals),
+        "raw_components": sub_raw,
+        "history": history,
+    }
 
 
 def fear_greed_score(db: Database) -> dict:
@@ -105,16 +196,16 @@ def fear_greed_score(db: Database) -> dict:
     except Exception:
         pass
 
-    # 5. Safe Haven Demand — high gold/silver ratio = fear
+    # 5. Safe Haven Demand — multi-signal sub-composite (3yr window)
     try:
-        gsr = gold_silver_ratio(db)
-        if len(gsr) >= 60:
-            pct = _compute_component(gsr)
-            component_series["Safe Haven"] = pct
+        sh = _safe_haven_subcomposite(db)
+        if sh["available"]:
+            component_series["Safe Haven"] = sh["history"]
             components["Safe Haven"] = {
-                "score": round(pct.iloc[-1], 1),
-                "raw_value": round(gsr.iloc[-1], 2),
-                "description": "Gold/Silver ratio",
+                "score": sh["score"],
+                "raw_value": sh["score"],
+                "description": f"Safe haven sub-composite ({sh['num_signals']}/5 signals)",
+                "sub_components": sh["raw_components"],
             }
     except Exception:
         pass

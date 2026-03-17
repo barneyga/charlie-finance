@@ -862,6 +862,21 @@ def main():
                 })
             st.dataframe(pd.DataFrame(comp_rows), hide_index=True, width="stretch")
 
+            # Safe Haven sub-signal breakdown
+            safe_haven_data = fg["components"].get("Safe Haven", {})
+            if "sub_components" in safe_haven_data:
+                st.subheader("Safe Haven Sub-Signals")
+                sh_rows = []
+                for name, data in safe_haven_data["sub_components"].items():
+                    _sh_score = data["score"]
+                    _sh_badge = "🔴" if _sh_score >= 80 else ("🟠" if _sh_score >= 60 else ("🟡" if _sh_score >= 40 else "🟢"))
+                    sh_rows.append({
+                        "Sub-Signal": name,
+                        "Score": f"{_sh_badge} {_sh_score:.0f}",
+                        "Raw Value": f"{data['raw_value']}",
+                    })
+                st.dataframe(pd.DataFrame(sh_rows), hide_index=True, width="stretch")
+
         if not fg["history"].empty:
             hist = fg["history"].loc[start_date:end_date]
             if not hist.empty:

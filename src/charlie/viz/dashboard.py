@@ -458,8 +458,20 @@ def main():
     _expand_all = screenshot_mode
     if screenshot_mode:
         st.markdown("""<style>
+        /* Hide sidebar */
         [data-testid="stSidebar"] { display: none; }
         .stMainBlockContainer { max-width: 100%; padding-left: 1rem; padding-right: 1rem; }
+        /* Override Streamlit's fixed-height containers so Firefox full-page capture works */
+        .stApp, [data-testid="stAppViewContainer"], .stMainBlockContainer,
+        [data-testid="stVerticalBlock"], section.main,
+        [data-testid="stAppViewBlockContainer"] {
+            height: auto !important;
+            min-height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            position: static !important;
+        }
+        .stApp > header { display: none; }
         </style>""", unsafe_allow_html=True)
 
     # Data freshness

@@ -4,8 +4,9 @@ import pandas as pd
 
 def rolling_zscore(series: pd.Series, window: int = 252) -> pd.Series:
     """How many std devs the current value is from its rolling mean."""
-    mean = series.rolling(window).mean()
-    std = series.rolling(window).std()
+    min_obs = max(window // 2, 20)
+    mean = series.rolling(window, min_periods=min_obs).mean()
+    std = series.rolling(window, min_periods=min_obs).std()
     z = (series - mean) / std
     z.name = f"{series.name}_zscore"
     return z

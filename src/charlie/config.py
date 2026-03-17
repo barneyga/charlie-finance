@@ -141,6 +141,36 @@ def get_settings() -> Settings:
                 fixed_dates=fixed,
             ))
 
+    # Load sentiment config
+    sentiment_path = PROJECT_ROOT / "config" / "sentiment.yaml"
+    sentiment_cfg = None
+    if sentiment_path.exists():
+        with open(sentiment_path) as f:
+            sent_raw = yaml.safe_load(f)
+        if sent_raw:
+            subs = []
+            for s in sent_raw.get("subreddits", []):
+                subs.append(SubredditConfig(
+                    name=s["name"],
+                    series_id=s["series_id"],
+                    display_name=s["display_name"],
+                    fetch_limit=s.get("fetch_limit", 100),
+                    sort=s.get("sort", "hot"),
+                ))
+            tt = sent_raw.get("ticker_tracking", {})
+            agg = sent_raw.get("aggregate", {})
+            sentiment_cfg = SentimentConfig(
+                subreddits=tuple(subs),
+                tracked_tickers=tuple(tt.get("symbols", [])),
+                ticker_series_prefix=tt.get("series_id_prefix", "SENT_TICKER_"),
+                aggregate_series_id=agg.get("series_id", "SENT_REDDIT_ALL"),
+            )
+
+    # Reddit credentials from .env
+    reddit_client_id = os.getenv("REDDIT_CLIENT_ID", "")
+    reddit_client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
+    reddit_user_agent = os.getenv("REDDIT_USER_AGENT", "charlie-finance/0.1")
+
     return Settings(
         fred_api_key=fred_api_key,
         db_path=db_path,
@@ -149,4 +179,8 @@ def get_settings() -> Settings:
         tickers=tuple(all_tickers),
         ticker_categories=tuple(ticker_categories),
         calendar_releases=tuple(all_releases),
+        reddit_client_id=reddit_client_id,
+        reddit_client_secret=reddit_client_secret,
+        reddit_user_agent=reddit_user_agent,
+        sentiment=sentiment_cfg,
     )

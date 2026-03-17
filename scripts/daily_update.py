@@ -39,6 +39,17 @@ def main():
         if yahoo.errors:
             logging.warning(yahoo.report())
 
+        # Reddit sentiment data
+        if settings.reddit_client_id and settings.sentiment:
+            from charlie.ingest.sentiment import SentimentIngester
+            sent = SentimentIngester(settings, db)
+            sent_count = sent.fetch_all()
+            logging.info(f"Sentiment update: {sent_count} posts scored")
+            if sent.errors:
+                logging.warning(sent.report())
+        else:
+            logging.info("Reddit credentials not set, skipping sentiment fetch")
+
 
 if __name__ == "__main__":
     main()

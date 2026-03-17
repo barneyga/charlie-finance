@@ -436,9 +436,31 @@ def main():
     db = get_db()
     settings = get_settings()
 
+    # Screenshot mode — expand all sections, hide sidebar
+    screenshot_mode = st.query_params.get("screenshot") == "true"
+
     # -- Sidebar --
     st.sidebar.title("Charlie Finance")
     st.sidebar.caption("Macro Analysis Dashboard")
+
+    screenshot_toggle = st.sidebar.checkbox(
+        "📸 Screenshot mode", value=screenshot_mode,
+        help="Expand all sections for full-page capture",
+    )
+    if screenshot_toggle != screenshot_mode:
+        if screenshot_toggle:
+            st.query_params["screenshot"] = "true"
+        else:
+            st.query_params.pop("screenshot", None)
+        st.rerun()
+
+    # In screenshot mode: hide sidebar, expand all sections
+    _expand_all = screenshot_mode
+    if screenshot_mode:
+        st.markdown("""<style>
+        [data-testid="stSidebar"] { display: none; }
+        .stMainBlockContainer { max-width: 100%; padding-left: 1rem; padding-right: 1rem; }
+        </style>""", unsafe_allow_html=True)
 
     # Data freshness
     freshness = _data_freshness(db)
@@ -534,7 +556,7 @@ def main():
 
     # Section 0: Weekly Report
     _anchor("report")
-    with st.expander("Weekly Report", expanded=False):
+    with st.expander("Weekly Report", expanded=_expand_all):
         _section_info(_INFO["report"])
         report = generate_weekly_report(db, fred_api_key=settings.fred_api_key or "")
 
@@ -559,7 +581,7 @@ def main():
 
     # Section: Alert History
     _anchor("alerts")
-    with st.expander("Alert History", expanded=False):
+    with st.expander("Alert History", expanded=_expand_all):
         _section_info(_INFO["alerts"])
 
         active = get_active_alerts(db)
@@ -588,7 +610,7 @@ def main():
                     "Status": status,
                     "Resolved": a.get("resolved_at") or "—",
                 })
-            st.dataframe(pd.DataFrame(hist_rows), use_container_width=True, hide_index=True)
+            st.dataframe(pd.DataFrame(hist_rows), width="stretch", hide_index=True)
         elif not active:
             st.info("No alert history yet. Alerts are generated during daily updates (`daily_update.py`).")
 
@@ -1395,7 +1417,7 @@ def main():
                     template="plotly_dark",
                     height=350,
                 )
-                st.plotly_chart(cat_fig, use_container_width=True)
+                st.plotly_chart(cat_fig, width="stretch")
 
             # Per-ETF flow table
             st.subheader("ETF Dollar Volume Activity")
@@ -1413,7 +1435,7 @@ def main():
             display["vs Avg (%)"] = display["vs Avg (%)"].apply(
                 lambda v: f"{'🟢' if v > 0 else '🔴'} {v:+.1f}%"
             )
-            st.dataframe(display, use_container_width=True, hide_index=True)
+            st.dataframe(display, width="stretch", hide_index=True)
 
             # Cumulative flow chart for top ETFs
             st.subheader("Cumulative Flows")
@@ -1432,7 +1454,7 @@ def main():
                     if not eq_df.empty:
                         st.plotly_chart(
                             time_series_chart(eq_df, "US Equity ETF Cumulative Flows ($M)"),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
             with flow_cols[1]:
@@ -1446,7 +1468,7 @@ def main():
                     if not bd_df.empty:
                         st.plotly_chart(
                             time_series_chart(bd_df, "Fixed Income ETF Cumulative Flows ($M)"),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
     # Section 13: Geographic Rotation

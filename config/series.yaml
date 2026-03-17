@@ -1,0 +1,172 @@
+categories:
+  yield_curve:
+    description: "Treasury yield curve components"
+    series:
+      - id: DGS1MO
+        name: "1-Month Treasury"
+        frequency: daily
+      - id: DGS3MO
+        name: "3-Month Treasury"
+        frequency: daily
+      - id: DGS6MO
+        name: "6-Month Treasury"
+        frequency: daily
+      - id: DGS1
+        name: "1-Year Treasury"
+        frequency: daily
+      - id: DGS2
+        name: "2-Year Treasury"
+        frequency: daily
+      - id: DGS5
+        name: "5-Year Treasury"
+        frequency: daily
+      - id: DGS10
+        name: "10-Year Treasury"
+        frequency: daily
+      - id: DGS30
+        name: "30-Year Treasury"
+        frequency: daily
+      - id: T10Y2Y
+        name: "10Y-2Y Spread"
+        frequency: daily
+      - id: T10Y3M
+        name: "10Y-3M Spread"
+        frequency: daily
+
+  inflation:
+    description: "Inflation indicators"
+    series:
+      - id: CPIAUCSL
+        name: "CPI All Urban Consumers"
+        frequency: monthly
+      - id: CPILFESL
+        name: "Core CPI (ex Food & Energy)"
+        frequency: monthly
+      - id: PCEPILFE
+        name: "Core PCE Price Index"
+        frequency: monthly
+      - id: T5YIE
+        name: "5-Year Breakeven Inflation"
+        frequency: daily
+      - id: T10YIE
+        name: "10-Year Breakeven Inflation"
+        frequency: daily
+      - id: MICH
+        name: "U Michigan Inflation Expectations"
+        frequency: monthly
+
+  labor_market:
+    description: "Employment indicators"
+    series:
+      - id: UNRATE
+        name: "Unemployment Rate"
+        frequency: monthly
+      - id: PAYEMS
+        name: "Total Nonfarm Payrolls"
+        frequency: monthly
+      - id: ICSA
+        name: "Initial Jobless Claims"
+        frequency: weekly
+      - id: CCSA
+        name: "Continued Claims"
+        frequency: weekly
+
+  growth:
+    description: "GDP and economic activity"
+    series:
+      - id: GDP
+        name: "Gross Domestic Product"
+        frequency: quarterly
+      - id: GDPC1
+        name: "Real GDP"
+        frequency: quarterly
+      - id: INDPRO
+        name: "Industrial Production Index"
+        frequency: monthly
+      - id: RSAFS
+        name: "Retail Sales"
+        frequency: monthly
+
+  credit_spreads:
+    description: "Credit market stress and OAS spreads"
+    series:
+      - id: BAA10Y
+        name: "BAA-10Y Treasury Spread"
+        frequency: daily
+      - id: BAAFFM
+        name: "BAA-Fed Funds Spread"
+        frequency: daily
+      - id: TEDRATE
+        name: "TED Spread"
+        frequency: daily
+      - id: BAMLH0A0HYM2
+        name: "ICE BofA US High Yield OAS"
+        frequency: daily
+      - id: BAMLC0A0CM
+        name: "ICE BofA US Corporate OAS"
+        frequency: daily
+      - id: BAMLH0A0HYM2EY
+        name: "ICE BofA HY Effective Yield"
+        frequency: daily
+
+  credit_quality:
+    description: "Loan delinquencies and credit volume"
+    series:
+      - id: DRTSCILM
+        name: "Delinquency Rate on C&I Loans"
+        frequency: quarterly
+      - id: DRALACBS
+        name: "Delinquency Rate on All Loans"
+        frequency: quarterly
+      - id: DRSFRMACBS
+        name: "Delinquency Rate on SF Residential Mortgages"
+        frequency: quarterly
+      - id: TOTLL
+        name: "Total Loans & Leases"
+        frequency: monthly
+      - id: BUSLOANS
+        name: "Commercial & Industrial Loans"
+        frequency: monthly
+
+  commodities:
+    description: "Commodity prices"
+    series:
+      - id: DCOILWTICO
+        name: "WTI Crude Oil"
+        frequency: daily
+
+  monetary_policy:
+    description: "Fed and money supply"
+    series:
+      - id: FEDFUNDS
+        name: "Effective Fed Funds Rate"
+        frequency: monthly
+      - id: DFF
+        name: "Daily Fed Funds Rate"
+        frequency: daily
+      - id: M2SL
+        name: "M2 Money Supply"
+        frequency: monthly
+      - id: WALCL
+        name: "Fed Balance Sheet Total Assets"
+        frequency: weekly
+
+  financial_conditions:
+    description: "Broad financial stress"
+    series:
+      - id: VIXCLS
+        name: "VIX"
+        frequency: daily
+      - id: NFCI
+        name: "Chicago Fed Financial Conditions"
+        frequency: weekly
+      - id: STLFSI2
+        name: "St. Louis Fed Financial Stress"
+        frequency: weekly
+
+  recession:
+    description: "Recession indicator (for chart overlays)"
+    series:
+      - id: USREC
+        name: "NBER Recession Indicator"
+        frequency: monthly

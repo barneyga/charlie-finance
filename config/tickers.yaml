@@ -1,0 +1,110 @@
+categories:
+  indices:
+    description: "Major market indices"
+    tickers:
+      - symbol: SPY
+        name: "S&P 500"
+      - symbol: QQQ
+        name: "Nasdaq 100"
+      - symbol: DIA
+        name: "Dow Jones"
+      - symbol: IWM
+        name: "Russell 2000"
+
+  sectors:
+    description: "Sector ETFs (all 11 GICS)"
+    tickers:
+      - symbol: XLF
+        name: "Financials"
+      - symbol: XLE
+        name: "Energy"
+      - symbol: XLK
+        name: "Technology"
+      - symbol: XLV
+        name: "Healthcare"
+      - symbol: XLU
+        name: "Utilities"
+      - symbol: XLB
+        name: "Materials"
+      - symbol: XLI
+        name: "Industrials"
+      - symbol: XLY
+        name: "Consumer Discretionary"
+      - symbol: XLP
+        name: "Consumer Staples"
+      - symbol: XLC
+        name: "Communication Services"
+      - symbol: XLRE
+        name: "Real Estate"
+
+  commodities:
+    description: "Commodity ETFs"
+    tickers:
+      - symbol: GLD
+        name: "Gold"
+      - symbol: SLV
+        name: "Silver"
+      - symbol: USO
+        name: "Crude Oil"
+
+  bonds:
+    description: "Bond ETFs"
+    tickers:
+      - symbol: TLT
+        name: "20Y+ Treasury"
+      - symbol: HYG
+        name: "High Yield Corporate"
+      - symbol: LQD
+        name: "Investment Grade Corporate"
+
+  breadth:
+    description: "Market breadth indicators"
+    tickers:
+      - symbol: RSP
+        name: "S&P 500 Equal Weight"
+
+  metals:
+    description: "Metals and miners"
+    tickers:
+      - symbol: COPX
+        name: "Copper Miners"
+
+  international:
+    description: "International equity ETFs"
+    tickers:
+      - symbol: EFA
+        name: "Developed Markets ex-US"
+      - symbol: EEM
+        name: "Emerging Markets"
+      - symbol: VGK
+        name: "Europe"
+
+  defense:
+    description: "Defense and aerospace"
+    tickers:
+      - symbol: ITA
+        name: "Aerospace & Defense"
+
+  tech_subsectors:
+    description: "AI and tech sub-sector exposure"
+    tickers:
+      - symbol: NVDA
+        name: "NVIDIA"
+      - symbol: SOXX
+        name: "Semiconductors"
+      - symbol: IGV
+        name: "Software"
+
+  currencies:
+    description: "FX rates and crypto"
+    tickers:
+      - symbol: DX=F
+        name: "US Dollar Index (DXY)"
+      - symbol: EURUSD=X
+        name: "EUR/USD"
+      - symbol: GBPUSD=X
+        name: "GBP/USD"
+      - symbol: USDJPY=X
+        name: "USD/JPY"
+      - symbol: BTC-USD
+        name: "Bitcoin"

@@ -1,0 +1,78 @@
+releases:
+  # High importance — market-moving
+  - id: 10
+    name: "CPI"
+    full_name: "Consumer Price Index"
+    importance: high
+  - id: 50
+    name: "NFP"
+    full_name: "Employment Situation"
+    importance: high
+  - id: 53
+    name: "GDP"
+    full_name: "Gross Domestic Product"
+    importance: high
+  - id: 326
+    name: "FOMC"
+    full_name: "FOMC Meeting (Summary of Economic Projections)"
+    importance: high
+  - id: 54
+    name: "PCE"
+    full_name: "Personal Income & Outlays"
+    importance: high
+
+  # Medium importance — significant but less volatile
+  - id: 46
+    name: "PPI"
+    full_name: "Producer Price Index"
+    importance: medium
+  - id: 9
+    name: "Retail Sales"
+    full_name: "Advance Monthly Sales for Retail and Food Services"
+    importance: medium
+  - id: 13
+    name: "Ind. Prod."
+    full_name: "Industrial Production and Capacity Utilization"
+    importance: medium
+  - id: 180
+    name: "Claims"
+    full_name: "Unemployment Insurance Weekly Claims"
+    importance: medium
+  - id: 192
+    name: "JOLTS"
+    full_name: "Job Openings and Labor Turnover Survey"
+    importance: medium
+  - id: 194
+    name: "ADP"
+    full_name: "ADP National Employment Report"
+    importance: medium
+  - id: 91
+    name: "UMich"
+    full_name: "Surveys of Consumers"
+    importance: medium
+
+  # FOMC meetings without SEP (not in FRED as a clean release)
+  # These are the 2026 non-SEP FOMC meeting dates
+  - id: 0
+    name: "FOMC"
+    full_name: "FOMC Meeting (Statement Only)"
+    importance: high
+    fixed_dates:
+      - "2026-01-28"
+      - "2026-05-06"
+      - "2026-07-29"
+      - "2026-10-28"
+
+  # Low importance — useful context
+  - id: 291
+    name: "Home Sales"
+    full_name: "Existing Home Sales"
+    importance: low
+  - id: 148
+    name: "Permits"
+    full_name: "Housing Units Authorized By Building Permits"
+    importance: low
+  - id: 51
+    name: "Trade"
+    full_name: "U.S. International Trade in Goods and Services"
+    importance: low

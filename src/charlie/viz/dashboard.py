@@ -18,7 +18,8 @@ from charlie.analysis.derived import (
     yield_curve_spread, yield_curve_shape, real_rate,
     cpi_yoy, payrolls_mom_change, m2_yoy,
     hy_ig_spread, credit_impulse,
-    gold_silver_ratio, stock_bond_correlation, spy_rsp_spread, sector_returns,
+    gold_silver_ratio, oil_gold_ratio, brent_wti_spread,
+    stock_bond_correlation, spy_rsp_spread, sector_returns,
 )
 from charlie.analysis.stats import rolling_zscore, percentile_rank, direction_arrow
 from charlie.analysis.regime import macro_regime, REGIME_COLORS
@@ -53,7 +54,7 @@ SECTIONS = {
         ("sectors", "Sector Scorecard"),
     ],
     "Cross-Asset": [
-        ("metals", "Metals & Commodities"),
+        ("metals", "Commodities & Energy"),
         ("divergence", "Cross-Asset Divergence"),
         ("geo", "Geographic Rotation"),
         ("tech", "AI & Tech Sub-sectors"),
@@ -160,8 +161,9 @@ _INFO = {
         "Sorted by 1-month return to show sector rotation."
     ),
     "metals": (
-        "Gold/Silver ratio: rising = risk-off (gold outperforming). Real yields vs gold: "
-        "inversely correlated — falling real rates are bullish for gold. "
+        "**Oil:** WTI (US benchmark) and Brent (international). Brent-WTI spread widening = "
+        "global supply tightness. Oil/Gold ratio: rising = growth/risk-on, falling = stagflation risk. "
+        "**Metals:** Gold/Silver ratio rising = risk-off. Real yields vs gold: inversely correlated. "
         "Silver vs copper: industrial demand signal."
     ),
     "divergence": (
@@ -783,73 +785,111 @@ def main():
     # ============================================================
     st.markdown("## Cross-Asset")
 
-    # Section 10: Metals & Commodities
+    # Section 10: Commodities & Energy
     _anchor("metals")
-    with st.expander("Metals & Commodities", expanded=True):
+    with st.expander("Commodities & Energy", expanded=True):
         _section_info(_INFO["metals"])
+
+        # --- Metric cards ---
         gld = query_series(db, "GLD", start=start_date, end=end_date)
-        if not gld.empty:
-            met1, met2, met3, met4 = st.columns(4)
-            with met1:
+        slv = query_series(db, "SLV", start=start_date, end=end_date)
+        wti = query_series(db, "DCOILWTICO", start=start_date, end=end_date)
+        brent = query_series(db, "DCOILBRENTEU", start=start_date, end=end_date)
+        gsr = gold_silver_ratio(db)
+        copx = query_series(db, "COPX", start=start_date, end=end_date)
+
+        met1, met2, met3, met4, met5, met6 = st.columns(6)
+        with met1:
+            if not wti.empty:
+                _wti_val = wti.iloc[-1]
+                _wti_badge = "🟢" if 50 <= _wti_val <= 80 else ("🔴" if _wti_val > 100 or _wti_val < 30 else "🟡")
+                st.metric(f"{_wti_badge} WTI Crude", f"${_wti_val:.2f}",
+                           f"{direction_arrow(wti)}" if len(wti) >= 2 else None)
+        with met2:
+            if not brent.empty:
+                st.metric("Brent Crude", f"${brent.iloc[-1]:.2f}",
+                           f"{direction_arrow(brent)}" if len(brent) >= 2 else None)
+        with met3:
+            if not gld.empty:
                 st.metric("Gold (GLD)", f"${gld.iloc[-1]:.2f}",
                            f"{direction_arrow(gld)}" if len(gld) >= 2 else None)
-            slv = query_series(db, "SLV", start=start_date, end=end_date)
-            with met2:
-                if not slv.empty:
-                    st.metric("Silver (SLV)", f"${slv.iloc[-1]:.2f}",
-                               f"{direction_arrow(slv)}" if len(slv) >= 2 else None)
-            gsr = gold_silver_ratio(db)
-            with met3:
-                if not gsr.empty:
-                    _gsr_val = gsr.iloc[-1]
-                    st.metric(f"{_alert_badge(_gsr_val, _THRESHOLDS['gold_silver'])} Gold/Silver Ratio", f"{_gsr_val:.2f}")
-            copx = query_series(db, "COPX", start=start_date, end=end_date)
-            with met4:
-                if not copx.empty:
-                    st.metric("Copper (COPX)", f"${copx.iloc[-1]:.2f}",
-                               f"{direction_arrow(copx)}" if len(copx) >= 2 else None)
+        with met4:
+            if not slv.empty:
+                st.metric("Silver (SLV)", f"${slv.iloc[-1]:.2f}",
+                           f"{direction_arrow(slv)}" if len(slv) >= 2 else None)
+        with met5:
+            if not gsr.empty:
+                _gsr_val = gsr.iloc[-1]
+                st.metric(f"{_alert_badge(_gsr_val, _THRESHOLDS['gold_silver'])} Gold/Silver", f"{_gsr_val:.1f}")
+        with met6:
+            if not copx.empty:
+                st.metric("Copper (COPX)", f"${copx.iloc[-1]:.2f}",
+                           f"{direction_arrow(copx)}" if len(copx) >= 2 else None)
 
-            metals_col1, metals_col2 = st.columns(2)
+        # --- Row 1: Oil charts ---
+        oil_col1, oil_col2 = st.columns(2)
 
-            with metals_col1:
-                if not gsr.empty:
-                    gsr_filtered = gsr.loc[start_date:end_date]
-                    st.plotly_chart(
-                        time_series_chart(gsr_filtered, "Gold/Silver Ratio", yaxis_title="Ratio"),
-                        use_container_width=True,
-                    )
+        with oil_col1:
+            oil_df = query_multiple_series(db, ["DCOILWTICO", "DCOILBRENTEU"], start=start_date, end=end_date)
+            if not oil_df.empty:
+                oil_df.columns = ["WTI Crude", "Brent Crude"]
+                st.plotly_chart(
+                    time_series_chart(oil_df, "WTI vs Brent Crude Oil", db=db, yaxis_title="$/barrel"),
+                    use_container_width=True,
+                )
 
-            with metals_col2:
-                real = real_rate(db)
-                if not real.empty and not gld.empty:
-                    st.plotly_chart(
-                        dual_axis_chart(
-                            real.loc[start_date:end_date], gld,
-                            "Real Yields vs Gold",
-                            y1_title="Real Rate %", y2_title="GLD Price",
-                        ),
-                        use_container_width=True,
-                    )
+        with oil_col2:
+            ogr = oil_gold_ratio(db)
+            if not ogr.empty:
+                ogr_filtered = ogr.loc[start_date:end_date]
+                st.plotly_chart(
+                    time_series_chart(ogr_filtered, "Oil/Gold Ratio (WTI/GLD)", yaxis_title="Ratio"),
+                    use_container_width=True,
+                )
 
-            metals_col3, metals_col4 = st.columns(2)
+        # --- Row 2: Metal charts ---
+        metals_col1, metals_col2 = st.columns(2)
 
-            with metals_col3:
-                slv_copx = query_multiple_series(db, ["SLV", "COPX"], start=start_date, end=end_date)
-                if not slv_copx.empty:
-                    slv_copx.columns = ["Silver (SLV)", "Copper Miners (COPX)"]
-                    st.plotly_chart(
-                        normalized_returns_chart(slv_copx, "Silver vs Copper Miners"),
-                        use_container_width=True,
-                    )
+        with metals_col1:
+            if not gsr.empty:
+                gsr_filtered = gsr.loc[start_date:end_date]
+                st.plotly_chart(
+                    time_series_chart(gsr_filtered, "Gold/Silver Ratio", yaxis_title="Ratio"),
+                    use_container_width=True,
+                )
 
-            with metals_col4:
-                comm_df = query_multiple_series(db, ["GLD", "SLV", "USO"], start=start_date, end=end_date)
-                if not comm_df.empty:
-                    comm_df.columns = ["Gold", "Silver", "Crude Oil"]
-                    st.plotly_chart(
-                        normalized_returns_chart(comm_df, "Commodities Normalized"),
-                        use_container_width=True,
-                    )
+        with metals_col2:
+            real = real_rate(db)
+            if not real.empty and not gld.empty:
+                st.plotly_chart(
+                    dual_axis_chart(
+                        real.loc[start_date:end_date], gld,
+                        "Real Yields vs Gold",
+                        y1_title="Real Rate %", y2_title="GLD Price",
+                    ),
+                    use_container_width=True,
+                )
+
+        # --- Row 3: Commodity comparisons ---
+        metals_col3, metals_col4 = st.columns(2)
+
+        with metals_col3:
+            slv_copx = query_multiple_series(db, ["SLV", "COPX"], start=start_date, end=end_date)
+            if not slv_copx.empty:
+                slv_copx.columns = ["Silver (SLV)", "Copper Miners (COPX)"]
+                st.plotly_chart(
+                    normalized_returns_chart(slv_copx, "Silver vs Copper Miners"),
+                    use_container_width=True,
+                )
+
+        with metals_col4:
+            comm_df = query_multiple_series(db, ["GLD", "SLV", "USO"], start=start_date, end=end_date)
+            if not comm_df.empty:
+                comm_df.columns = ["Gold", "Silver", "Crude Oil (USO)"]
+                st.plotly_chart(
+                    normalized_returns_chart(comm_df, "Commodities Normalized"),
+                    use_container_width=True,
+                )
 
     # Section 11: Cross-Asset Divergence
     _anchor("divergence")

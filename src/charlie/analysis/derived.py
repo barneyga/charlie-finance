@@ -107,6 +107,26 @@ def gold_silver_ratio(db: Database) -> pd.Series:
     return ratio.dropna()
 
 
+def oil_gold_ratio(db: Database) -> pd.Series:
+    """WTI Crude / GLD ratio. Rising = growth/risk-on, falling = stagflation risk."""
+    df = query_multiple_series(db, ["DCOILWTICO", "GLD"])
+    if df.empty or "DCOILWTICO" not in df.columns or "GLD" not in df.columns:
+        return pd.Series(dtype=float)
+    ratio = df["DCOILWTICO"] / df["GLD"]
+    ratio.name = "oil_gold_ratio"
+    return ratio.dropna()
+
+
+def brent_wti_spread(db: Database) -> pd.Series:
+    """Brent - WTI spread. Widening = international supply tightness."""
+    df = query_multiple_series(db, ["DCOILBRENTEU", "DCOILWTICO"])
+    if df.empty or "DCOILBRENTEU" not in df.columns or "DCOILWTICO" not in df.columns:
+        return pd.Series(dtype=float)
+    spread = df["DCOILBRENTEU"] - df["DCOILWTICO"]
+    spread.name = "brent_wti_spread"
+    return spread.dropna()
+
+
 def stock_bond_correlation(db: Database, window: int = 63) -> pd.Series:
     """Rolling correlation of SPY vs TLT daily returns (63d ≈ 3 months).
 

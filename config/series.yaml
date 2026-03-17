@@ -134,6 +134,9 @@ categories:
       - id: DCOILWTICO
         name: "WTI Crude Oil"
         frequency: daily
+      - id: DCOILBRENTEU
+        name: "Brent Crude Oil"
+        frequency: daily
 
   monetary_policy:
     description: "Fed and money supply"

@@ -37,7 +37,7 @@ def _compute_component(
 
 
 def fear_greed_score(db: Database) -> dict:
-    """Compute composite fear/greed score from 7 market-based components.
+    """Compute composite fear/greed score from 9 market-based components.
 
     Returns dict with:
         score: float (0-100, 0=extreme greed, 100=extreme fear)
@@ -164,6 +164,22 @@ def fear_greed_score(db: Database) -> dict:
                 "score": round(pct.iloc[-1], 1),
                 "raw_value": round(pcr.iloc[-1], 3),
                 "description": "CBOE equity put/call ratio",
+            }
+    except Exception:
+        pass
+
+    # 9. COT S&P 500 Positioning — high net long = complacency (greed)
+    try:
+        cot_es = query_series(db, "COT_ES_PCT")
+        if len(cot_es) >= 26:
+            cot_es.name = "cot_es_pct"
+            # High net long = greed → invert so high long = high fear score
+            pct = _compute_component(cot_es, invert=True)
+            component_series["COT Positioning"] = pct
+            components["COT Positioning"] = {
+                "score": round(pct.iloc[-1], 1),
+                "raw_value": round(cot_es.iloc[-1], 1),
+                "description": "S&P 500 futures net speculator % (inverted)",
             }
     except Exception:
         pass

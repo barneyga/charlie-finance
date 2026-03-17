@@ -194,3 +194,44 @@ def sector_returns(db: Database) -> pd.DataFrame:
     if not df.empty:
         df = df.set_index("Sector")
     return df
+
+
+# ── COT Positioning ──────────────────────────────────────────
+
+# Contract prefixes and display names
+COT_CONTRACTS = {
+    "COT_ES": "S&P 500",
+    "COT_NQ": "Nasdaq",
+    "COT_GC": "Gold",
+    "COT_CL": "Crude Oil",
+    "COT_ZN": "10Y Treasury",
+    "COT_EC": "Euro FX",
+}
+
+
+def cot_summary_table(db: Database, window: int = 52) -> pd.DataFrame:
+    """Build a summary table of COT positioning across all tracked contracts.
+
+    Returns DataFrame with columns: Contract, Net %, Z-Score, Direction.
+    """
+    from charlie.analysis.stats import rolling_zscore, direction_arrow
+
+    rows = []
+    for prefix, name in COT_CONTRACTS.items():
+        pct = query_series(db, f"{prefix}_PCT")
+        if pct.empty:
+            continue
+
+        current = pct.iloc[-1]
+        z = rolling_zscore(pct, window)
+        z_val = z.iloc[-1] if not z.empty else 0.0
+        arrow = direction_arrow(pct) if len(pct) >= 2 else ""
+
+        rows.append({
+            "Contract": name,
+            "Net %": round(current, 1),
+            "Z-Score": round(z_val, 2),
+            "Direction": arrow,
+        })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()

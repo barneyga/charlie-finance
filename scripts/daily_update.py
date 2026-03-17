@@ -47,6 +47,14 @@ def main():
         if cboe.errors:
             logging.warning(cboe.report())
 
+        # CFTC COT positioning (no API key needed, weekly data)
+        from charlie.ingest.cftc import CFTCIngester
+        cftc = CFTCIngester(settings, db)
+        cftc_count = cftc.fetch_all()
+        logging.info(f"CFTC update: {cftc_count} observations")
+        if cftc.errors:
+            logging.warning(cftc.report())
+
         # Reddit sentiment data
         if settings.reddit_client_id and settings.sentiment:
             from charlie.ingest.sentiment import SentimentIngester

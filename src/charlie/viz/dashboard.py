@@ -20,6 +20,7 @@ from charlie.analysis.derived import (
     hy_ig_spread, credit_impulse,
     gold_silver_ratio, oil_gold_ratio, brent_wti_spread,
     stock_bond_correlation, spy_rsp_spread, sector_returns,
+    cot_summary_table, COT_CONTRACTS,
 )
 from charlie.analysis.stats import rolling_zscore, percentile_rank, direction_arrow
 from charlie.analysis.regime import macro_regime, REGIME_COLORS
@@ -86,6 +87,9 @@ _GLOSSARY = {
     "MA": "Moving Average",
     "HYG": "High Yield Corporate Bond ETF",
     "LQD": "Investment Grade Corporate Bond ETF",
+    "COT": "Commitment of Traders",
+    "CFTC": "Commodity Futures Trading Commission",
+    "OI": "Open Interest",
 }
 
 
@@ -120,6 +124,7 @@ SECTIONS = {
     "Cross-Asset": [
         ("metals", "Commodities & Energy"),
         ("divergence", "Cross-Asset Divergence"),
+        ("cot", "COT Positioning"),
         ("geo", "Geographic Rotation"),
         ("tech", "AI & Tech Sub-sectors"),
     ],
@@ -189,12 +194,12 @@ _INFO = {
         "is when risk assets typically sell off. Recovery to Expansion is when you want to be long."
     ),
     "fear_greed": (
-        "**What:** A composite 0-100 score measuring market sentiment from 7 price-based signals. "
+        "**What:** A composite 0-100 score measuring market sentiment from 9 price-based signals. "
         "**0 = Extreme Greed** (complacent, risky), **100 = Extreme Fear** (panic, often a buying "
         "opportunity).\n\n"
         "**Components:** VIX level, HY-IG credit stress, SPY/RSP breadth divergence, SPY-TLT "
-        "correlation, gold/silver safe haven demand, yield curve shape, and SPY momentum "
-        "(50-day vs 200-day MA).\n\n"
+        "correlation, gold/silver safe haven demand, yield curve shape, SPY momentum "
+        "(50-day vs 200-day MA), CBOE put/call ratio, and COT S&P 500 futures positioning.\n\n"
         "**How to read:** Each component is percentile-ranked over a 5-year window and "
         "equal-weighted. Extremes (below 20 or above 80) are contrarian signals — when everyone "
         "is fearful, it's often near a bottom. When everyone is greedy, risk is elevated."
@@ -311,6 +316,20 @@ _INFO = {
         "**Silver vs copper:** Both industrial metals. Divergence signals shift between industrial "
         "vs monetary demand."
     ),
+    "cot": (
+        "**What:** The CFTC Commitment of Traders report shows how institutional, commercial, "
+        "and speculative traders are positioned in major futures contracts. Published weekly "
+        "(every Friday, data as of prior Tuesday).\n\n"
+        "**Key concept:** **Non-commercial (speculative) net positioning** = long contracts minus "
+        "short contracts held by hedge funds, CTAs, and large speculators. Expressed as a percentage "
+        "of total open interest for comparability across contracts.\n\n"
+        "**How to read:** COT is a **contrarian indicator** at extremes. When speculators are max "
+        "long (Z-score > 2.0), a reversal is near — the trade is crowded and there are no more "
+        "buyers. When speculators are max short (Z-score < -2.0), the pessimism is overdone.\n\n"
+        "**Z-score thresholds:** 🟢 Normal (-1.5 to 1.5), 🟡 Extended (1.5 to 2.0 or -2.0 to -1.5), "
+        "🔴 Extreme (> 2.0 or < -2.0 — contrarian signal).\n\n"
+        "**Contracts tracked:** S&P 500 E-mini, Nasdaq 100, Gold, WTI Crude Oil, 10Y Treasury, Euro FX."
+    ),
     "divergence": (
         "**What:** Cross-asset divergences are early warning signals.\n\n"
         "**SPY-TLT correlation** (63-day rolling): Normally stocks and bonds move inversely — "
@@ -370,6 +389,7 @@ _THRESHOLDS = {
     "unemployment": {"green": (0, 4.5), "yellow": (4.5, 6), "red": (6, float("inf"))},
     "gold_silver": {"green": (0, 80), "yellow": (80, 90), "red": (90, float("inf"))},
     "put_call": {"green": (0, 0.7), "yellow": (0.7, 1.0), "red": (1.0, float("inf"))},
+    "cot_z": {"green": (0, 1.5), "yellow": (1.5, 2.0), "red": (2.0, float("inf"))},
 }
 
 
@@ -1149,7 +1169,87 @@ def main():
                     width="stretch",
                 )
 
-    # Section 12: Geographic Rotation
+    # Section 12: COT Positioning
+    _anchor("cot")
+    with st.expander("COT Positioning", expanded=True):
+        _section_info(_INFO["cot"])
+
+        cot_table = cot_summary_table(db)
+        if cot_table.empty:
+            st.info("No COT data loaded. Run `python scripts/fetch.py --source cftc` to fetch CFTC data.")
+        else:
+            # Summary table with z-score badges
+            display_rows = []
+            for _, row in cot_table.iterrows():
+                z_abs = abs(row["Z-Score"])
+                badge = _alert_badge(z_abs, _THRESHOLDS["cot_z"])
+                display_rows.append({
+                    "Contract": row["Contract"],
+                    "Net %": f"{row['Net %']:+.1f}%",
+                    "Z-Score": f"{badge} {row['Z-Score']:+.2f}",
+                    "Direction": row["Direction"],
+                })
+            st.dataframe(pd.DataFrame(display_rows), hide_index=True, width="stretch")
+
+            # Row 2: S&P 500 and Nasdaq positioning charts
+            cot_col1, cot_col2 = st.columns(2)
+
+            with cot_col1:
+                es_pct = query_series(db, "COT_ES_PCT")
+                if not es_pct.empty:
+                    es_pct.name = "Net % of OI"
+                    fig = time_series_chart(es_pct, "S&P 500 Futures — Net Speculator %", yaxis_title="% of OI")
+                    fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                    st.plotly_chart(fig, width="stretch")
+
+            with cot_col2:
+                nq_pct = query_series(db, "COT_NQ_PCT")
+                if not nq_pct.empty:
+                    nq_pct.name = "Net % of OI"
+                    fig = time_series_chart(nq_pct, "Nasdaq 100 Futures — Net Speculator %", yaxis_title="% of OI")
+                    fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                    st.plotly_chart(fig, width="stretch")
+
+            # Row 3: Gold and Crude Oil positioning
+            cot_col3, cot_col4 = st.columns(2)
+
+            with cot_col3:
+                gc_pct = query_series(db, "COT_GC_PCT")
+                if not gc_pct.empty:
+                    gc_pct.name = "Net % of OI"
+                    fig = time_series_chart(gc_pct, "Gold Futures — Net Speculator %", yaxis_title="% of OI")
+                    fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                    st.plotly_chart(fig, width="stretch")
+
+            with cot_col4:
+                cl_pct = query_series(db, "COT_CL_PCT")
+                if not cl_pct.empty:
+                    cl_pct.name = "Net % of OI"
+                    fig = time_series_chart(cl_pct, "Crude Oil Futures — Net Speculator %", yaxis_title="% of OI")
+                    fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                    st.plotly_chart(fig, width="stretch")
+
+            # Row 4: Multi-contract comparison (normalized)
+            all_pct = {}
+            for prefix, name in COT_CONTRACTS.items():
+                s = query_series(db, f"{prefix}_PCT")
+                if not s.empty:
+                    z = rolling_zscore(s, 52)
+                    if not z.empty:
+                        all_pct[name] = z
+            if len(all_pct) >= 2:
+                multi_df = pd.DataFrame(all_pct).dropna()
+                if not multi_df.empty:
+                    fig = time_series_chart(
+                        multi_df, "All Contracts — Positioning Z-Scores (52-week)",
+                        yaxis_title="Z-Score",
+                    )
+                    fig.add_hline(y=2, line_dash="dot", line_color="#ef4444", annotation_text="Extreme Long")
+                    fig.add_hline(y=-2, line_dash="dot", line_color="#22c55e", annotation_text="Extreme Short")
+                    fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                    st.plotly_chart(fig, width="stretch")
+
+    # Section 13: Geographic Rotation
     _anchor("geo")
     with st.expander("Geographic Rotation", expanded=True):
         _section_info(_INFO["geo"])
@@ -1364,7 +1464,7 @@ def main():
     # Footer
     st.divider()
     st.caption(
-        f"Data sources: FRED, Yahoo Finance, Reddit | "
+        f"Data sources: FRED, Yahoo Finance, CBOE, CFTC, Reddit | "
         f"{len(meta)} series loaded"
     )
 

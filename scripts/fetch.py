@@ -11,6 +11,7 @@ from charlie.storage.db import Database
 from charlie.ingest.fred import FredIngester
 from charlie.ingest.yahoo import YahooIngester
 from charlie.ingest.cboe import CBOEIngester
+from charlie.ingest.cftc import CFTCIngester
 
 
 def fetch_fred(settings, db, args):
@@ -54,7 +55,7 @@ def fetch_yahoo(settings, db, args):
 def main():
     parser = argparse.ArgumentParser(description="Fetch macro and market data")
     parser.add_argument(
-        "--source", choices=["fred", "yahoo", "cboe", "all"], default="fred",
+        "--source", choices=["fred", "yahoo", "cboe", "cftc", "all"], default="fred",
         help="Data source to fetch (default: fred)",
     )
     parser.add_argument("--category", "-c", help="Fetch a specific category only")
@@ -82,6 +83,11 @@ def main():
             count = cboe.fetch_all()
             print(f"[CBOE] Fetched {count} total observations")
             print(cboe.report())
+        if args.source in ("cftc", "all"):
+            cftc = CFTCIngester(settings, db)
+            count = cftc.fetch_all()
+            print(f"[CFTC] Fetched {count} total observations")
+            print(cftc.report())
 
 
 if __name__ == "__main__":

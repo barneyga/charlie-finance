@@ -1,0 +1,19 @@
+# StockTwits sentiment tracking — symbols to monitor
+# Uses the free StockTwits API v2 (no token required, 200 req/hr)
+# With an access token: 400 req/hr
+
+symbols:
+  - SPY
+  - QQQ
+  - NVDA
+  - AAPL
+  - TSLA
+  - MSFT
+  - AMD
+  - AMZN
+  - META
+  - GOOG
+
+aggregate_series_id: SENT_STOCKTWITS_ALL
+series_id_prefix: "SENT_STOCKTWITS_"
+fetch_limit: 30  # messages per symbol to analyze

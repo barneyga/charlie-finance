@@ -122,3 +122,63 @@ def sentiment_vs_price(
     if len(df) > days:
         df = df.iloc[-days:]
     return df
+
+
+def stocktwits_summary(db: Database) -> dict:
+    """Aggregate StockTwits sentiment summary.
+
+    Returns dict with: available, overall_score, label, color, trend,
+    symbol_scores {symbol: {score, bull_pct, msg_count, change_7d}}, history Series.
+    """
+    from charlie.config import get_settings
+    settings = get_settings()
+
+    overall = query_series(db, "SENT_STOCKTWITS_ALL")
+
+    if overall.empty:
+        return {
+            "available": False,
+            "overall_score": 50.0,
+            "label": "No Data",
+            "color": "#888",
+            "trend": 0.0,
+            "symbol_scores": {},
+            "history": pd.Series(dtype=float),
+        }
+
+    current = overall.iloc[-1]
+    label, color = _sentiment_label(current)
+
+    trend = 0.0
+    if len(overall) >= 7:
+        trend = current - overall.iloc[-7]
+
+    # Per-symbol scores
+    symbol_scores = {}
+    cfg = settings.stocktwits
+    if cfg:
+        for sym in cfg.symbols:
+            sid = f"{cfg.series_id_prefix}{sym}"
+            s = query_series(db, sid)
+            if s.empty:
+                continue
+            score = s.iloc[-1]
+            change_7d = 0.0
+            if len(s) >= 7:
+                change_7d = score - s.iloc[-7]
+            symbol_scores[sym] = {
+                "score": score,
+                "bull_pct": score,  # score IS bull_pct for StockTwits
+                "msg_count": "—",  # not stored in time series
+                "change_7d": change_7d,
+            }
+
+    return {
+        "available": True,
+        "overall_score": current,
+        "label": label,
+        "color": color,
+        "trend": trend,
+        "symbol_scores": symbol_scores,
+        "history": overall,
+    }

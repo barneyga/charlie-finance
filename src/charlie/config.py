@@ -63,6 +63,14 @@ class AlertThreshold:
 
 
 @dataclass(frozen=True)
+class StockTwitsConfig:
+    symbols: tuple[str, ...]
+    series_id_prefix: str
+    aggregate_series_id: str
+    fetch_limit: int = 30
+
+
+@dataclass(frozen=True)
 class ETFFlowConfig:
     symbol: str
     name: str
@@ -82,6 +90,8 @@ class Settings:
     reddit_client_secret: str = ""
     reddit_user_agent: str = "charlie-finance/0.1"
     sentiment: SentimentConfig | None = None
+    stocktwits_access_token: str = ""
+    stocktwits: StockTwitsConfig | None = None
     alert_thresholds: tuple[AlertThreshold, ...] = ()
     etf_flow_tickers: tuple[ETFFlowConfig, ...] = ()
     # SMTP settings for email alerts (optional)
@@ -198,6 +208,21 @@ def get_settings() -> Settings:
     reddit_client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
     reddit_user_agent = os.getenv("REDDIT_USER_AGENT", "charlie-finance/0.1")
 
+    # StockTwits config
+    stocktwits_path = PROJECT_ROOT / "config" / "stocktwits.yaml"
+    stocktwits_cfg = None
+    if stocktwits_path.exists():
+        with open(stocktwits_path) as f:
+            st_raw = yaml.safe_load(f)
+        if st_raw and st_raw.get("symbols"):
+            stocktwits_cfg = StockTwitsConfig(
+                symbols=tuple(st_raw["symbols"]),
+                series_id_prefix=st_raw.get("series_id_prefix", "SENT_STOCKTWITS_"),
+                aggregate_series_id=st_raw.get("aggregate_series_id", "SENT_STOCKTWITS_ALL"),
+                fetch_limit=st_raw.get("fetch_limit", 30),
+            )
+    stocktwits_access_token = os.getenv("STOCKTWITS_ACCESS_TOKEN", "")
+
     # Load alert thresholds
     alerts_path = PROJECT_ROOT / "config" / "alerts.yaml"
     all_alerts: list[AlertThreshold] = []
@@ -248,6 +273,8 @@ def get_settings() -> Settings:
         reddit_client_secret=reddit_client_secret,
         reddit_user_agent=reddit_user_agent,
         sentiment=sentiment_cfg,
+        stocktwits_access_token=stocktwits_access_token,
+        stocktwits=stocktwits_cfg,
         alert_thresholds=tuple(all_alerts),
         etf_flow_tickers=tuple(all_etf_flows),
         smtp_host=smtp_host,

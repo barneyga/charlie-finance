@@ -64,6 +64,17 @@ def main():
             if flows.errors:
                 logging.warning(flows.report())
 
+        # StockTwits sentiment (no API key required)
+        if settings.stocktwits:
+            from charlie.ingest.stocktwits import StockTwitsIngester
+            st_ing = StockTwitsIngester(settings, db)
+            st_count = st_ing.fetch_all()
+            logging.info(f"StockTwits update: {st_count} symbols scored")
+            if st_ing.errors:
+                logging.warning(st_ing.report())
+        else:
+            logging.info("No StockTwits config, skipping")
+
         # Reddit sentiment data
         if settings.reddit_client_id and settings.sentiment:
             from charlie.ingest.sentiment import SentimentIngester

@@ -55,7 +55,7 @@ def fetch_yahoo(settings, db, args):
 def main():
     parser = argparse.ArgumentParser(description="Fetch macro and market data")
     parser.add_argument(
-        "--source", choices=["fred", "yahoo", "cboe", "cftc", "etf_flows", "all"],
+        "--source", choices=["fred", "yahoo", "cboe", "cftc", "etf_flows", "stocktwits", "all"],
         default="fred", help="Data source to fetch (default: fred)",
     )
     parser.add_argument("--category", "-c", help="Fetch a specific category only")
@@ -94,6 +94,12 @@ def main():
             count = flows.fetch_all()
             print(f"[ETF Flows] Fetched {count} total observations")
             print(flows.report())
+        if args.source in ("stocktwits", "all"):
+            from charlie.ingest.stocktwits import StockTwitsIngester
+            st_ing = StockTwitsIngester(settings, db)
+            count = st_ing.fetch_all()
+            print(f"[StockTwits] Scored {count} symbols")
+            print(st_ing.report())
 
 
 if __name__ == "__main__":

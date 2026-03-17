@@ -136,8 +136,17 @@ SECTIONS = {
     ],
     "FX & Sentiment": [
         ("currencies", "Currencies"),
-        ("sentiment", "Reddit Sentiment"),
+        ("sentiment", "Social Sentiment"),
     ],
+}
+
+# Map alert metric_ids to dashboard section_ids
+_METRIC_TO_SECTION = {
+    "vix": "credit", "spread_10y2y": "yield_curve",
+    "hy_oas": "credit", "hy_oas_z": "credit",
+    "cpi_yoy": "inflation", "unemployment": "labor",
+    "gold_silver": "metals", "put_call": "credit",
+    "cot_z": "cot", "fear_greed_fear": "regime", "fear_greed_greed": "regime",
 }
 
 
@@ -405,12 +414,13 @@ _INFO = {
         "rates. Not a hedge — more like leveraged risk appetite."
     ),
     "sentiment": (
-        "**What:** Reddit sentiment from finance-focused subreddits.\n\n"
-        "**Sources:** r/wallstreetbets, r/stocks, r/investing. Each post scored using VADER "
+        "**What:** Social media sentiment from Reddit and StockTwits.\n\n"
+        "**Reddit:** r/wallstreetbets, r/stocks, r/investing. Posts scored using VADER "
         "sentiment analysis, averaged daily.\n\n"
-        "**Score:** 0 = Very Bearish, 50 = Neutral, 100 = Very Bullish. Per-ticker mentions "
-        "tracked by keyword matching.\n\n"
-        "**How to use:** Reddit sentiment is *contrarian* at extremes. Retail overwhelmingly "
+        "**StockTwits:** User-tagged bullish/bearish sentiment on individual stock symbols. "
+        "Score = bullish messages / (bullish + bearish) × 100.\n\n"
+        "**Score:** 0 = Very Bearish, 50 = Neutral, 100 = Very Bullish.\n\n"
+        "**How to use:** Social sentiment is *contrarian* at extremes. Retail overwhelmingly "
         "bullish (>70) = caution. Fear dominant (<30) = often marks bottoms. Mid-range = noise."
     ),
 }
@@ -438,7 +448,19 @@ def main():
 
     # Screenshot mode — used by scripts/screenshot.py (headless Playwright)
     screenshot_mode = st.query_params.get("screenshot") == "true"
-    _expand_all = screenshot_mode
+
+    # Compute active alerts early — used by sidebar badges + smart-collapse
+    active_alerts = get_active_alerts(db)
+    _section_alert_counts: dict[str, int] = {}
+    _section_worst_level: dict[str, str] = {}
+    _sections_with_alerts: set[str] = set()
+    for a in active_alerts:
+        section = _METRIC_TO_SECTION.get(a["metric_id"])
+        if section:
+            _section_alert_counts[section] = _section_alert_counts.get(section, 0) + 1
+            _sections_with_alerts.add(section)
+            if a["level"] == "red" or _section_worst_level.get(section) != "red":
+                _section_worst_level[section] = a["level"]
 
     # -- Sidebar --
     st.sidebar.title("Charlie Finance")
@@ -459,12 +481,18 @@ def main():
             st.sidebar.caption(f"{icon} {label}: {hours:.0f}h ago")
         st.sidebar.divider()
 
-    # Navigation
+    # Navigation with alert badges
     st.sidebar.markdown("**Navigation**")
     for group, items in SECTIONS.items():
         st.sidebar.markdown(f"*{group}*")
         for sid, name in items:
-            st.sidebar.markdown(f"[{name}](#{sid})", unsafe_allow_html=True)
+            count = _section_alert_counts.get(sid, 0)
+            if count > 0:
+                level = _section_worst_level.get(sid, "yellow")
+                badge = {"red": "🔴", "yellow": "🟡"}.get(level, "")
+                st.sidebar.markdown(f"[{name}](#{sid}) {badge}{count}", unsafe_allow_html=True)
+            else:
+                st.sidebar.markdown(f"[{name}](#{sid})", unsafe_allow_html=True)
 
     st.sidebar.divider()
 
@@ -487,47 +515,94 @@ def main():
         start_date = str(default_start)
         end_date = str(datetime.now().date())
 
-    if st.sidebar.button("Refresh FRED Data"):
-        with st.sidebar.status("Fetching FRED data..."):
-            from charlie.ingest.fred import FredIngester
-            ingester = FredIngester(settings, db)
-            count = ingester.fetch_all()
-            st.sidebar.success(f"Fetched {count} observations")
-            st.sidebar.text(ingester.report())
+    # Expand-all toggle + smart-collapse helper
+    expand_all_toggle = st.sidebar.checkbox("Expand all sections", value=False)
+    _always_expand = {"regime", "calendar"}
+
+    def _should_expand(section_id: str) -> bool:
+        if screenshot_mode or expand_all_toggle:
+            return True
+        if section_id in _always_expand:
+            return True
+        if section_id in _sections_with_alerts:
+            return True
+        return False
+
+    # Consolidated refresh
+    st.sidebar.markdown("**Data Refresh**")
+    refresh_source = st.sidebar.selectbox(
+        "Source", ["All", "FRED", "Market", "CBOE", "CFTC", "ETF Flows", "StockTwits", "Sentiment"],
+        label_visibility="collapsed",
+    )
+    if st.sidebar.button("🔄 Refresh"):
+        source_map = {
+            "FRED": ["fred"], "Market": ["yahoo"], "CBOE": ["cboe"],
+            "CFTC": ["cftc"], "ETF Flows": ["etf_flows"],
+            "StockTwits": ["stocktwits"], "Sentiment": ["sentiment"],
+        }
+        if refresh_source == "All":
+            sources = ["fred", "yahoo", "cboe", "cftc", "etf_flows"]
+            if settings.stocktwits:
+                sources.append("stocktwits")
+            if settings.reddit_client_id and settings.sentiment:
+                sources.append("sentiment")
+        else:
+            sources = source_map.get(refresh_source, [])
+
+        with st.sidebar.status(f"Refreshing {refresh_source}..."):
+            for src in sources:
+                try:
+                    if src == "fred":
+                        from charlie.ingest.fred import FredIngester
+                        ing = FredIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"FRED: {c} obs")
+                    elif src == "yahoo":
+                        from charlie.ingest.yahoo import YahooIngester
+                        ing = YahooIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"Yahoo: {c} obs")
+                    elif src == "cboe":
+                        from charlie.ingest.cboe import CBOEIngester
+                        ing = CBOEIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"CBOE: {c} obs")
+                    elif src == "cftc":
+                        from charlie.ingest.cftc import CFTCIngester
+                        ing = CFTCIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"CFTC: {c} obs")
+                    elif src == "etf_flows":
+                        from charlie.ingest.etf_flows import ETFFlowIngester
+                        ing = ETFFlowIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"ETF Flows: {c} obs")
+                    elif src == "stocktwits":
+                        from charlie.ingest.stocktwits import StockTwitsIngester
+                        ing = StockTwitsIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"StockTwits: {c} symbols")
+                    elif src == "sentiment":
+                        from charlie.ingest.sentiment import SentimentIngester
+                        ing = SentimentIngester(settings, db)
+                        c = ing.fetch_all()
+                        st.sidebar.caption(f"Sentiment: {c} posts")
+                except Exception as e:
+                    st.sidebar.caption(f"⚠️ {src}: {e}")
+            st.sidebar.success("Done!")
             st.cache_resource.clear()
             st.rerun()
 
-    if st.sidebar.button("Refresh Market Data"):
-        with st.sidebar.status("Fetching Yahoo data..."):
-            from charlie.ingest.yahoo import YahooIngester
-            ingester = YahooIngester(settings, db)
-            count = ingester.fetch_all()
-            st.sidebar.success(f"Fetched {count} observations")
-            st.sidebar.text(ingester.report())
-            st.cache_resource.clear()
-            st.rerun()
-
-    if settings.reddit_client_id and settings.sentiment:
-        if st.sidebar.button("Refresh Sentiment"):
-            with st.sidebar.status("Fetching Reddit sentiment..."):
-                from charlie.ingest.sentiment import SentimentIngester
-                ingester = SentimentIngester(settings, db)
-                count = ingester.fetch_all()
-                st.sidebar.success(f"Scored {count} posts")
-                st.sidebar.text(ingester.report())
-                st.cache_resource.clear()
-                st.rerun()
-
+    _scripts_dir = Path(__file__).resolve().parent.parent.parent.parent / "scripts"
     if st.sidebar.button("📸 Screenshot"):
         with st.sidebar.status("Capturing full-page screenshot..."):
             import subprocess
             result = subprocess.run(
-                [sys.executable, str(Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "screenshot.py"),
+                [sys.executable, str(_scripts_dir / "screenshot.py"),
                  "--port", "8501", "--wait", "12"],
                 capture_output=True, text=True, timeout=90,
             )
             if result.returncode == 0:
-                # Parse output path from script
                 for line in result.stdout.splitlines():
                     if "saved to" in line.lower():
                         st.sidebar.success(line.strip())
@@ -551,13 +626,59 @@ def main():
         return
 
     # ============================================================
+    # TOP KPI BAR — always visible
+    # ============================================================
+    # Cache these so the Regime section below doesn't recompute them
+    _kpi_regime = macro_regime(db)
+    _kpi_fg = fear_greed_score(db)
+
+    kpi_cols = st.columns(6)
+    with kpi_cols[0]:
+        _r_label = _kpi_regime["regime"].replace("_", " ").title()
+        _r_color = REGIME_COLORS.get(_kpi_regime["regime"], "#888")
+        st.markdown("**Regime**")
+        st.markdown(
+            f"<span style='color:{_r_color};font-size:1.4em;font-weight:bold'>"
+            f"{_r_label}</span>",
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[1]:
+        _fg_score = _kpi_fg["score"]
+        st.metric("Fear / Greed", f"{_fg_score:.0f} / 100")
+        st.markdown(
+            f"<span style='color:{_kpi_fg['color']};font-weight:bold'>{_kpi_fg['label']}</span>",
+            unsafe_allow_html=True,
+        )
+    with kpi_cols[2]:
+        _vix_s = query_series(db, "VIXCLS")
+        _vix_val = float(_vix_s.iloc[-1]) if not _vix_s.empty else None
+        badge = _alert_badge(_vix_val, _THRESHOLDS["vix"]) if _vix_val else ""
+        st.metric(f"{badge} VIX", f"{_vix_val:.1f}" if _vix_val else "—")
+    with kpi_cols[3]:
+        _spread_s = yield_curve_spread(db)
+        _spread_val = float(_spread_s.iloc[-1]) if not _spread_s.empty else None
+        badge = _alert_badge(_spread_val, _THRESHOLDS["spread_10y2y"]) if _spread_val else ""
+        st.metric(f"{badge} 10Y-2Y", f"{_spread_val:.2f}%" if _spread_val else "—")
+    with kpi_cols[4]:
+        _hy_s = query_series(db, "BAMLH0A0HYM2")
+        _hy_val = float(_hy_s.iloc[-1]) if not _hy_s.empty else None
+        badge = _alert_badge(_hy_val, _THRESHOLDS["hy_oas"]) if _hy_val else ""
+        st.metric(f"{badge} HY OAS", f"{_hy_val:.0f} bps" if _hy_val else "—")
+    with kpi_cols[5]:
+        _spy_s = query_series(db, "SPY")
+        _spy_arrow = direction_arrow(_spy_s) if not _spy_s.empty else "—"
+        st.metric("S&P 500", _spy_arrow)
+
+    st.divider()
+
+    # ============================================================
     # MACRO OVERVIEW
     # ============================================================
     st.markdown("## Macro Overview")
 
     # Section 0: Weekly Report
     _anchor("report")
-    with st.expander("Weekly Report", expanded=_expand_all):
+    with st.expander("Weekly Report", expanded=_should_expand("report")):
         _section_info(_INFO["report"])
         report = generate_weekly_report(db, fred_api_key=settings.fred_api_key or "")
 
@@ -581,15 +702,15 @@ def main():
 
     # Section: Alert History
     _anchor("alerts")
-    with st.expander("Alert History", expanded=_expand_all):
+    with st.expander("Alert History", expanded=_should_expand("alerts")):
         _section_info(_INFO["alerts"])
 
-        active = get_active_alerts(db)
+        # Reuse active_alerts from sidebar computation
         history = get_alert_history(db, limit=30)
 
-        if active:
+        if active_alerts:
             st.markdown("### Active Alerts")
-            for a in active:
+            for a in active_alerts:
                 badge = {"red": "🔴", "yellow": "🟡"}.get(a["level"], "⚪")
                 st.markdown(f"{badge} **{a['message']}** — *{a['triggered_at']}*")
             st.divider()
@@ -611,18 +732,19 @@ def main():
                     "Resolved": a.get("resolved_at") or "—",
                 })
             st.dataframe(pd.DataFrame(hist_rows), width="stretch", hide_index=True)
-        elif not active:
+        elif not active_alerts:
             st.info("No alert history yet. Alerts are generated during daily updates (`daily_update.py`).")
 
     # Section 1: Macro Regime Summary + Fear/Greed
     _anchor("regime")
-    with st.expander("Macro Regime + Fear/Greed", expanded=True):
+    with st.expander("Macro Regime + Fear/Greed", expanded=_should_expand("regime")):
         _section_info(_INFO["regime"] + "\n\n---\n\n**Fear/Greed:** " + _INFO["fear_greed"])
-        regime_data = macro_regime(db)
+        # Reuse values from KPI bar to avoid recomputation
+        regime_data = _kpi_regime
         regime_label = regime_data["regime"].replace("_", " ").title()
         regime_color = REGIME_COLORS.get(regime_data["regime"], "#888")
 
-        fg = fear_greed_score(db)
+        fg = _kpi_fg
 
         r1_col1, r1_col2, r1_col3 = st.columns([2, 2, 1])
         with r1_col1:
@@ -688,7 +810,7 @@ def main():
 
     # Section 2: Economic Calendar
     _anchor("calendar")
-    with st.expander("Economic Calendar", expanded=True):
+    with st.expander("Economic Calendar", expanded=_should_expand("calendar")):
         _section_info(_INFO["calendar"])
         @st.cache_data(ttl=3600)
         def _load_calendar(_api_key, _releases, _days):
@@ -750,7 +872,7 @@ def main():
 
     # Section 3: Yield Curve
     _anchor("yield_curve")
-    with st.expander("Yield Curve", expanded=True):
+    with st.expander("Yield Curve", expanded=_should_expand("yield_curve")):
         _section_info(_INFO["yield_curve"])
         yc_col1, yc_col2 = st.columns(2)
 
@@ -792,7 +914,7 @@ def main():
 
     # Section 4: Inflation
     _anchor("inflation")
-    with st.expander("Inflation", expanded=True):
+    with st.expander("Inflation", expanded=_should_expand("inflation")):
         _section_info(_INFO["inflation"])
         inf_col1, inf_col2 = st.columns(2)
 
@@ -817,7 +939,7 @@ def main():
 
     # Section 5: Labor Market
     _anchor("labor")
-    with st.expander("Labor Market", expanded=True):
+    with st.expander("Labor Market", expanded=_should_expand("labor")):
         _section_info(_INFO["labor"])
         lab_col1, lab_col2 = st.columns(2)
 
@@ -857,7 +979,7 @@ def main():
 
     # Section 6: Credit Deep Dive
     _anchor("credit")
-    with st.expander("Credit Deep Dive", expanded=True):
+    with st.expander("Credit Deep Dive", expanded=_should_expand("credit")):
         _section_info(_INFO["credit"])
         hy_oas = query_series(db, "BAMLH0A0HYM2")
         ig_oas = query_series(db, "BAMLC0A0CM")
@@ -1000,7 +1122,7 @@ def main():
 
     # Section 7: Monetary Policy
     _anchor("monetary")
-    with st.expander("Monetary Policy", expanded=True):
+    with st.expander("Monetary Policy", expanded=_should_expand("monetary")):
         _section_info(_INFO["monetary"])
         mp_col1, mp_col2 = st.columns(2)
 
@@ -1037,7 +1159,7 @@ def main():
 
     # Section 8: Market Breadth
     _anchor("breadth")
-    with st.expander("Market Breadth", expanded=True):
+    with st.expander("Market Breadth", expanded=_should_expand("breadth")):
         _section_info(_INFO["breadth"])
         spy = query_series(db, "SPY", start=start_date, end=end_date)
         if not spy.empty:
@@ -1105,7 +1227,7 @@ def main():
 
     # Section 9: Sector Scorecard
     _anchor("sectors")
-    with st.expander("Sector Scorecard", expanded=True):
+    with st.expander("Sector Scorecard", expanded=_should_expand("sectors")):
         _section_info(_INFO["sectors"])
         sec_df = sector_returns(db)
         if not sec_df.empty:
@@ -1148,7 +1270,7 @@ def main():
 
     # Section 10: Commodities & Energy
     _anchor("metals")
-    with st.expander("Commodities & Energy", expanded=True):
+    with st.expander("Commodities & Energy", expanded=_should_expand("metals")):
         _section_info(_INFO["metals"])
 
         # --- Metric cards ---
@@ -1254,7 +1376,7 @@ def main():
 
     # Section 11: Cross-Asset Divergence
     _anchor("divergence")
-    with st.expander("Cross-Asset Divergence", expanded=True):
+    with st.expander("Cross-Asset Divergence", expanded=_should_expand("divergence")):
         _section_info(_INFO["divergence"])
         ca_col1, ca_col2 = st.columns(2)
 
@@ -1302,7 +1424,7 @@ def main():
 
     # Section 12: COT Positioning
     _anchor("cot")
-    with st.expander("COT Positioning", expanded=True):
+    with st.expander("COT Positioning", expanded=_should_expand("cot")):
         _section_info(_INFO["cot"])
 
         cot_table = cot_summary_table(db)
@@ -1382,7 +1504,7 @@ def main():
 
     # Section: ETF Flows
     _anchor("etf_flows")
-    with st.expander("ETF Flows", expanded=True):
+    with st.expander("ETF Flows", expanded=_should_expand("etf_flows")):
         _section_info(_INFO["etf_flows"])
 
         flow_summary = etf_flow_summary(db)
@@ -1473,7 +1595,7 @@ def main():
 
     # Section 13: Geographic Rotation
     _anchor("geo")
-    with st.expander("Geographic Rotation", expanded=True):
+    with st.expander("Geographic Rotation", expanded=_should_expand("geo")):
         _section_info(_INFO["geo"])
         geo_col1, geo_col2 = st.columns(2)
 
@@ -1520,7 +1642,7 @@ def main():
 
     # Section 13: AI & Tech Sub-sectors
     _anchor("tech")
-    with st.expander("AI & Tech Sub-sectors", expanded=True):
+    with st.expander("AI & Tech Sub-sectors", expanded=_should_expand("tech")):
         _section_info(_INFO["tech"])
         tech_col1, tech_col2 = st.columns(2)
 
@@ -1561,7 +1683,7 @@ def main():
 
     # Section 14: Currencies
     _anchor("currencies")
-    with st.expander("Currencies", expanded=True):
+    with st.expander("Currencies", expanded=_should_expand("currencies")):
         _section_info(_INFO["currencies"])
         dxy = query_series(db, "DX=F", start=start_date, end=end_date)
         if not dxy.empty:
@@ -1612,81 +1734,154 @@ def main():
         else:
             st.info("No currency data loaded. Click **Refresh Market Data** in the sidebar.")
 
-    # Section 15: Reddit Sentiment
+    # Section 15: Social Sentiment (Reddit + StockTwits)
     _anchor("sentiment")
-    with st.expander("Reddit Sentiment", expanded=True):
+    with st.expander("Social Sentiment", expanded=_should_expand("sentiment")):
         _section_info(_INFO["sentiment"])
         sent = sentiment_summary(db)
 
-        if not sent["available"]:
-            if not settings.reddit_client_id:
-                st.info(
-                    "Reddit sentiment requires API credentials. "
-                    "Add `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` to your `.env` file. "
-                    "Create an app at https://www.reddit.com/prefs/apps/"
-                )
-            else:
-                st.info("No sentiment data yet. Click **Refresh Sentiment** in the sidebar.")
+        from charlie.analysis.sentiment import stocktwits_summary
+
+        st_sent = stocktwits_summary(db)
+
+        has_reddit = sent["available"]
+        has_stocktwits = st_sent["available"]
+
+        if not has_reddit and not has_stocktwits:
+            st.info(
+                "No sentiment data loaded. Configure Reddit credentials in `.env` "
+                "and/or add `config/stocktwits.yaml`, then click **🔄 Refresh** → StockTwits or Sentiment."
+            )
         else:
-            # Row 1: Overall gauge + per-subreddit scores
-            sent_col1, sent_col2 = st.columns([2, 3])
+            tab_names = []
+            if has_reddit:
+                tab_names.append("Reddit")
+            if has_stocktwits:
+                tab_names.append("StockTwits")
+            if has_reddit and has_stocktwits:
+                tab_names.append("Combined")
 
-            with sent_col1:
-                st.plotly_chart(
-                    gauge_chart(sent["overall_score"], "Reddit Sentiment", sent["label"]),
-                    width="stretch",
-                )
+            tabs = st.tabs(tab_names)
+            tab_idx = 0
 
-            with sent_col2:
-                if sent["subreddit_scores"]:
-                    sub_cols = st.columns(len(sent["subreddit_scores"]))
-                    for i, (name, score) in enumerate(sent["subreddit_scores"].items()):
-                        with sub_cols[i]:
-                            delta = None
-                            if sent["trend"] != 0:
-                                delta = f"{sent['trend']:+.1f}"
-                            st.metric(name, f"{score:.1f}", delta)
-
-            # Row 2: Sentiment history
-            if not sent["history"].empty:
-                hist = sent["history"].loc[start_date:end_date]
-                if not hist.empty:
-                    fig = time_series_chart(hist, "Overall Reddit Sentiment History", yaxis_title="Score (0=Bearish, 100=Bullish)")
-                    fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
-                    fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
-                    st.plotly_chart(fig, width="stretch")
-
-            # Row 3: Ticker sentiment ranking
-            if settings.sentiment:
-                ranking = ticker_sentiment_ranking(
-                    db, list(settings.sentiment.tracked_tickers),
-                    settings.sentiment.ticker_series_prefix,
-                )
-                if not ranking.empty:
-                    st.subheader("Ticker Sentiment Ranking")
-                    st.dataframe(ranking, hide_index=True, width="stretch")
-
-                    # Row 4: Sentiment vs Price for top ticker
-                    top_ticker = ranking.iloc[0]["Ticker"]
-                    svp = sentiment_vs_price(
-                        db, top_ticker,
-                        settings.sentiment.ticker_series_prefix,
-                    )
-                    if not svp.empty:
+            # Reddit tab
+            if has_reddit:
+                with tabs[tab_idx]:
+                    sent_col1, sent_col2 = st.columns([2, 3])
+                    with sent_col1:
                         st.plotly_chart(
-                            dual_axis_chart(
-                                svp["Sentiment"], svp["Price"],
-                                f"{top_ticker}: Sentiment vs Price",
-                                y1_title="Sentiment Score", y2_title="Price ($)",
-                            ),
+                            gauge_chart(sent["overall_score"], "Reddit Sentiment", sent["label"]),
                             width="stretch",
                         )
+                    with sent_col2:
+                        if sent["subreddit_scores"]:
+                            sub_cols = st.columns(len(sent["subreddit_scores"]))
+                            for i, (name, score) in enumerate(sent["subreddit_scores"].items()):
+                                with sub_cols[i]:
+                                    delta = None
+                                    if sent["trend"] != 0:
+                                        delta = f"{sent['trend']:+.1f}"
+                                    st.metric(name, f"{score:.1f}", delta)
+
+                    if not sent["history"].empty:
+                        hist = sent["history"].loc[start_date:end_date]
+                        if not hist.empty:
+                            fig = time_series_chart(hist, "Reddit Sentiment History", yaxis_title="Score (0=Bearish, 100=Bullish)")
+                            fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                            fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
+                            fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
+                            st.plotly_chart(fig, width="stretch")
+
+                    if settings.sentiment:
+                        ranking = ticker_sentiment_ranking(
+                            db, list(settings.sentiment.tracked_tickers),
+                            settings.sentiment.ticker_series_prefix,
+                        )
+                        if not ranking.empty:
+                            st.subheader("Reddit Ticker Ranking")
+                            st.dataframe(ranking, hide_index=True, width="stretch")
+
+                            top_ticker = ranking.iloc[0]["Ticker"]
+                            svp = sentiment_vs_price(
+                                db, top_ticker,
+                                settings.sentiment.ticker_series_prefix,
+                            )
+                            if not svp.empty:
+                                st.plotly_chart(
+                                    dual_axis_chart(
+                                        svp["Sentiment"], svp["Price"],
+                                        f"{top_ticker}: Reddit Sentiment vs Price",
+                                        y1_title="Sentiment Score", y2_title="Price ($)",
+                                    ),
+                                    width="stretch",
+                                )
+                tab_idx += 1
+
+            # StockTwits tab
+            if has_stocktwits:
+                with tabs[tab_idx]:
+                    st_col1, st_col2 = st.columns([2, 3])
+                    with st_col1:
+                        st.plotly_chart(
+                            gauge_chart(st_sent["overall_score"], "StockTwits Sentiment", st_sent["label"]),
+                            width="stretch",
+                        )
+                    with st_col2:
+                        st.metric("Overall Score", f"{st_sent['overall_score']:.1f}")
+                        st.markdown(
+                            f"<span style='color:{st_sent['color']};font-weight:bold;font-size:1.2em'>"
+                            f"{st_sent['label']}</span>",
+                            unsafe_allow_html=True,
+                        )
+
+                    if not st_sent["history"].empty:
+                        hist = st_sent["history"].loc[start_date:end_date]
+                        if not hist.empty:
+                            fig = time_series_chart(hist, "StockTwits Sentiment History", yaxis_title="Score (0=Bearish, 100=Bullish)")
+                            fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+                            fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
+                            fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
+                            st.plotly_chart(fig, width="stretch")
+
+                    if st_sent["symbol_scores"]:
+                        st.subheader("StockTwits Per-Symbol Sentiment")
+                        st_rows = []
+                        for sym, data in st_sent["symbol_scores"].items():
+                            st_rows.append({
+                                "Symbol": sym,
+                                "Score": f"{data['score']:.1f}",
+                                "Bull %": f"{data['bull_pct']:.0f}%",
+                                "Messages": data["msg_count"],
+                                "7d Chg": f"{data['change_7d']:+.1f}" if data["change_7d"] else "—",
+                            })
+                        st.dataframe(pd.DataFrame(st_rows), hide_index=True, width="stretch")
+                tab_idx += 1
+
+            # Combined tab
+            if has_reddit and has_stocktwits:
+                with tabs[tab_idx]:
+                    # Blended score
+                    reddit_score = sent["overall_score"]
+                    stocktwits_score = st_sent["overall_score"]
+                    blended = (reddit_score + stocktwits_score) / 2
+                    from charlie.analysis.sentiment import _sentiment_label
+                    bl_label, bl_color = _sentiment_label(blended)
+
+                    st.plotly_chart(
+                        gauge_chart(blended, "Combined Social Sentiment", bl_label),
+                        width="stretch",
+                    )
+
+                    cmp_cols = st.columns(2)
+                    with cmp_cols[0]:
+                        st.metric("Reddit", f"{reddit_score:.1f}", help="Average across subreddits")
+                    with cmp_cols[1]:
+                        st.metric("StockTwits", f"{stocktwits_score:.1f}", help="Average across tracked symbols")
 
     # Footer
     st.divider()
     st.caption(
-        f"Data sources: FRED, Yahoo Finance, CBOE, CFTC, Reddit | "
+        f"Data sources: FRED, Yahoo Finance, CBOE, CFTC, Reddit, StockTwits | "
         f"{len(meta)} series loaded"
     )
 

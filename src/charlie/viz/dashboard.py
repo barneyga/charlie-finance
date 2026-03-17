@@ -33,8 +33,70 @@ from charlie.viz.charts import (
 
 st.set_page_config(page_title="Charlie Finance", page_icon="$", layout="wide")
 
-# Smooth scrolling CSS
-st.markdown("""<style>html { scroll-behavior: smooth; }</style>""", unsafe_allow_html=True)
+# Smooth scrolling CSS + abbr tooltip styling
+st.markdown("""<style>
+html { scroll-behavior: smooth; }
+abbr { text-decoration: underline dotted; cursor: help; }
+</style>""", unsafe_allow_html=True)
+
+# Acronym glossary — hover to see definition
+_GLOSSARY = {
+    "CPI": "Consumer Price Index",
+    "PCE": "Personal Consumption Expenditures",
+    "NFP": "Nonfarm Payrolls",
+    "FOMC": "Federal Open Market Committee",
+    "GDP": "Gross Domestic Product",
+    "YoY": "Year-over-Year",
+    "MoM": "Month-over-Month",
+    "VIX": "CBOE Volatility Index",
+    "HY": "High Yield",
+    "IG": "Investment Grade",
+    "OAS": "Option-Adjusted Spread",
+    "DXY": "US Dollar Index",
+    "NFCI": "National Financial Conditions Index",
+    "STLFSI": "St. Louis Fed Financial Stress Index",
+    "RSP": "Equal-Weight S&P 500 ETF",
+    "SPY": "S&P 500 ETF (cap-weighted)",
+    "TLT": "20+ Year Treasury Bond ETF",
+    "GICS": "Global Industry Classification Standard",
+    "M2": "M2 Money Supply",
+    "BTC": "Bitcoin",
+    "FX": "Foreign Exchange",
+    "TIPS": "Treasury Inflation-Protected Securities",
+    "WTI": "West Texas Intermediate (US crude benchmark)",
+    "GLD": "Gold ETF (SPDR)",
+    "SLV": "Silver ETF (iShares)",
+    "COPX": "Copper Miners ETF",
+    "USO": "United States Oil Fund ETF",
+    "EFA": "Developed Markets ex-US ETF",
+    "EEM": "Emerging Markets ETF",
+    "VGK": "European Stocks ETF",
+    "ITA": "US Aerospace & Defense ETF",
+    "QQQ": "Nasdaq 100 ETF",
+    "IGV": "Software ETF",
+    "SOXX": "Semiconductor ETF",
+    "NVDA": "NVIDIA Corporation",
+    "WAL": "Write-Ahead Logging",
+    "FRED": "Federal Reserve Economic Data",
+    "VADER": "Valence Aware Dictionary for Sentiment Reasoning",
+    "PRAW": "Python Reddit API Wrapper",
+    "ETF": "Exchange-Traded Fund",
+    "MA": "Moving Average",
+    "HYG": "High Yield Corporate Bond ETF",
+    "LQD": "Investment Grade Corporate Bond ETF",
+}
+
+
+def _abbr(text: str) -> str:
+    """Replace known acronyms with <abbr> hover tooltips."""
+    import re
+    for acr, defn in sorted(_GLOSSARY.items(), key=lambda x: -len(x[0])):
+        text = re.sub(
+            rf"\b{re.escape(acr)}\b",
+            f'<abbr title="{defn}">{acr}</abbr>',
+            text,
+        )
+    return text
 
 # Section definitions for navigation
 SECTIONS = {
@@ -99,7 +161,7 @@ def _anchor(section_id: str):
 def _section_info(explanation: str):
     """Render a clickable info popover inside a section."""
     with st.popover("ℹ️"):
-        st.markdown(explanation)
+        st.markdown(_abbr(explanation), unsafe_allow_html=True)
 
 
 def _alert_badge(value: float, thresholds: dict[str, tuple[float, float]]) -> str:
@@ -116,74 +178,178 @@ def _alert_badge(value: float, thresholds: dict[str, tuple[float, float]]) -> st
 # Section explanations
 _INFO = {
     "regime": (
-        "Classifies the economy into 4 states (Expansion, Late Cycle, Contraction, Recovery) "
-        "using 6 signals: yield curve inversion, credit spread z-scores, CPI YoY, HY OAS, "
-        "unemployment trend, and delinquency rates. Score range: -4 (contraction) to +4 (expansion)."
+        "**What:** Classifies the economy into 4 states — Expansion, Late Cycle, Contraction, "
+        "or Recovery — based on 6 signals.\n\n"
+        "**Signals used:** Yield curve inversion, credit spread z-scores, CPI YoY, HY OAS level, "
+        "unemployment trend (3-month change), and loan delinquency rates.\n\n"
+        "**How to read:** Score ranges from -4 (deep contraction) to +4 (strong expansion). "
+        "Transitions between regimes matter more than the regime itself — Late Cycle to Contraction "
+        "is when risk assets typically sell off. Recovery to Expansion is when you want to be long."
     ),
     "fear_greed": (
-        "Composite 0-100 score from 7 market-based components: VIX level, HY-IG credit stress, "
-        "SPY/RSP breadth, SPY-TLT correlation, gold/silver safe haven ratio, yield curve shape, "
-        "and SPY momentum (50d/200d MA). Each percentile-ranked over a 5-year window and "
-        "equal-weighted. **0 = Extreme Greed, 100 = Extreme Fear.**"
+        "**What:** A composite 0-100 score measuring market sentiment from 7 price-based signals. "
+        "**0 = Extreme Greed** (complacent, risky), **100 = Extreme Fear** (panic, often a buying "
+        "opportunity).\n\n"
+        "**Components:** VIX level, HY-IG credit stress, SPY/RSP breadth divergence, SPY-TLT "
+        "correlation, gold/silver safe haven demand, yield curve shape, and SPY momentum "
+        "(50-day vs 200-day MA).\n\n"
+        "**How to read:** Each component is percentile-ranked over a 5-year window and "
+        "equal-weighted. Extremes (below 20 or above 80) are contrarian signals — when everyone "
+        "is fearful, it's often near a bottom. When everyone is greedy, risk is elevated."
     ),
     "calendar": (
-        "Upcoming FRED economic release dates. High importance (🔴): CPI, NFP, FOMC, GDP, PCE. "
-        "Medium (🟡): retail sales, housing, industrial production. Data from FRED Release Dates API."
+        "**What:** Upcoming economic data releases from FRED.\n\n"
+        "**Importance levels:** 🔴 High = market-moving (CPI, NFP, FOMC, GDP, PCE). "
+        "🟡 Medium = notable (retail sales, housing starts, industrial production). "
+        "⚪ Low = context (minor regional surveys).\n\n"
+        "**Why it matters:** Markets move on *surprises* relative to expectations. Knowing when "
+        "data drops lets you position ahead or avoid being caught off-guard."
     ),
     "yield_curve": (
-        "Treasury yield curve shape across maturities (1M to 30Y). **10Y-2Y spread below zero = "
-        "inverted curve**, historically precedes recessions by 12-18 months."
+        "**What:** The yield curve plots Treasury bond yields by maturity (1 month to 30 years). "
+        "Normally it slopes upward — you earn more for lending money longer.\n\n"
+        "**The 10Y-2Y spread** is the most-watched indicator. When it goes **below zero (inverts)**, "
+        "short-term rates exceed long-term rates. This means the bond market expects the Fed will "
+        "need to cut rates because the economy is weakening.\n\n"
+        "**Why it matters:** An inverted yield curve has preceded every US recession in the last "
+        "50 years, typically by 12-18 months. The *un-inversion* (spread going back positive) "
+        "often signals the recession is imminent or starting — not that things are better.\n\n"
+        "**How to read the charts:** Left chart shows the curve's current shape vs 3 months and "
+        "1 year ago. A flattening or inverting shape = caution. Right chart tracks the 10Y-2Y "
+        "spread over time — the dashed line at zero is your warning level."
     ),
     "inflation": (
-        "CPI YoY: headline consumer price index year-over-year change. Core CPI excludes food "
-        "and energy. Breakeven rates = market-implied inflation expectations (TIPS spread)."
+        "**What:** Measures how fast prices are rising.\n\n"
+        "**CPI YoY:** Headline Consumer Price Index, year-over-year change. Includes everything "
+        "you buy — food, gas, rent, etc. **Core CPI** strips out food and energy because they're "
+        "volatile, giving a cleaner trend.\n\n"
+        "**Breakeven rates:** The difference between regular Treasury yields and TIPS yields. "
+        "This is what the *bond market* thinks inflation will average over 5 or 10 years. "
+        "When breakevens rise, markets expect more inflation ahead.\n\n"
+        "**Why it matters:** The Fed targets ~2% inflation. Above 3% = Fed likely tightening "
+        "(bad for stocks/bonds). Below 1% = deflation risk (bad for economy).\n\n"
+        "**Alert thresholds:** 🟢 CPI < 3%, 🟡 3-4%, 🔴 > 4%."
     ),
     "labor": (
-        "Unemployment rate (U-3), nonfarm payrolls month-over-month change, initial claims "
-        "(weekly new filings), continued claims (ongoing benefit recipients)."
+        "**What:** Four key employment indicators.\n\n"
+        "**Unemployment rate (U-3):** Percentage of people actively looking for work who can't "
+        "find it. Below 4% is historically tight. Rising unemployment triggers Fed rate cuts.\n\n"
+        "**NFP (Nonfarm Payrolls):** Jobs added/lost last month. The single most market-moving "
+        "data point each month. Positive = growth, negative = contraction.\n\n"
+        "**Initial Claims:** Weekly count of *new* unemployment filings. Leading indicator — "
+        "spikes precede rising unemployment by weeks. Under 250K = healthy.\n\n"
+        "**Continued Claims:** People still receiving benefits. Shows how long it takes to find "
+        "new work. Rising = labor market deteriorating.\n\n"
+        "**Alert thresholds:** 🟢 Unemployment < 4.5%, 🟡 4.5-6%, 🔴 > 6%."
     ),
     "credit": (
-        "HY OAS: option-adjusted spread on high-yield corporate bonds over treasuries. "
-        "Higher = more stress. HY-IG spread differential isolates credit risk premium. "
-        "Z-scores flag deviations from 1-year mean. NFCI/STLFSI are financial conditions indices."
+        "**What:** Credit markets often signal trouble before stocks do.\n\n"
+        "**HY OAS:** The extra yield investors demand to hold risky corporate bonds over safe "
+        "Treasuries. Think of it as the market's price for default risk. Under 400 bps = calm, "
+        "over 600 bps = stress, over 800 bps = crisis.\n\n"
+        "**HY-IG spread:** Gap between high-yield and investment-grade spreads. When this widens, "
+        "the riskiest companies are getting punished — early warning of trouble.\n\n"
+        "**Z-scores:** How far current spreads are from their 1-year average in standard "
+        "deviations. Above 1.5 = unusually wide, something is brewing.\n\n"
+        "**VIX:** Implied volatility of S&P 500 options. Under 20 = calm, over 25 = elevated, "
+        "over 35 = panic.\n\n"
+        "**NFCI / STLFSI:** Financial conditions indices. Positive = tighter than average "
+        "(restrictive). Negative = loose (accommodative).\n\n"
+        "**Alert thresholds:** HY OAS: 🟢 < 400, 🟡 400-600, 🔴 > 600. VIX: 🟢 < 20, 🟡 20-25, 🔴 > 25."
     ),
     "monetary": (
-        "Fed funds rate, M2 money supply growth (YoY), Fed balance sheet total assets. "
-        "M2 contraction is historically rare and signals tight liquidity."
+        "**What:** Fed policy and money supply.\n\n"
+        "**Fed Funds Rate:** The interest rate banks charge each other overnight. The Fed's "
+        "primary tool — raising it slows the economy, lowering it stimulates. Impacts every "
+        "other rate in the economy.\n\n"
+        "**M2 Money Supply (YoY):** Total money in the economy (cash, checking, savings, money "
+        "market funds). Normally grows 5-7%/year. Negative M2 growth is historically rare and "
+        "signals active liquidity drain — restrictive for asset prices.\n\n"
+        "**Fed Balance Sheet:** Total assets held by the Fed. Growing (QE) = injecting money. "
+        "Shrinking (QT) = pulling money out. More liquidity = bullish for risk assets."
     ),
     "breadth": (
-        "SPY (cap-weighted) vs RSP (equal-weighted S&P 500). Rising SPY/RSP ratio = "
-        "concentration in mega-caps. Falling ratio = broad participation (healthier rally). "
+        "**What:** Compares SPY (market-cap-weighted) vs RSP (equal-weight S&P 500).\n\n"
+        "**Why this matters:** SPY gives huge weight to the top 7-10 stocks (Apple, Microsoft, "
+        "NVIDIA, etc.). RSP treats all 500 equally. When SPY rises but RSP lags, only a few "
+        "mega-caps are driving gains — the rally is narrow and fragile.\n\n"
+        "**How to read:** Rising SPY/RSP ratio = increasing concentration (top-heavy, risky). "
+        "Falling ratio = broad participation (healthier, more sustainable rally). "
         "**Crown's key principle: breadth reveals what the index hides.**"
     ),
     "sectors": (
-        "All 11 GICS sectors. Returns color-coded: green = positive, red = negative. "
-        "Sorted by 1-month return to show sector rotation."
+        "**What:** Performance of all 11 GICS sector ETFs.\n\n"
+        "**Sector rotation** is a key macro signal. Early expansion: cyclicals lead (XLY, XLF, "
+        "XLI). Late cycle: energy and materials (XLE, XLB). Contraction: defensives hold up "
+        "(XLU, XLP, XLV). Recovery: tech and discretionary lead again.\n\n"
+        "**How to read:** Green = positive return, red = negative. Sorted by 1-month return. "
+        "Which sectors lead/lag tells you where institutional money is flowing.\n\n"
+        "**Sectors:** XLF (Financials), XLE (Energy), XLK (Tech), XLV (Healthcare), XLU (Utilities), "
+        "XLB (Materials), XLI (Industrials), XLY (Discretionary), XLP (Staples), "
+        "XLC (Comms), XLRE (Real Estate)."
     ),
     "metals": (
-        "**Oil:** WTI (US benchmark) and Brent (international). Brent-WTI spread widening = "
-        "global supply tightness. Oil/Gold ratio: rising = growth/risk-on, falling = stagflation risk. "
-        "**Metals:** Gold/Silver ratio rising = risk-off. Real yields vs gold: inversely correlated. "
-        "Silver vs copper: industrial demand signal."
+        "**Oil:**\n\n"
+        "**WTI** = US crude benchmark. **Brent** = international benchmark. Brent usually trades "
+        "at a premium. **Brent-WTI spread widening** = global supply disruption. Narrowing = "
+        "US-specific dynamics.\n\n"
+        "**Oil/Gold ratio:** Rising = growth/risk-on (demand driving oil). Falling = stagflation "
+        "risk or flight to safety.\n\n"
+        "**WTI thresholds:** 🟢 $50-80, 🟡 $30-50 or $80-100, 🔴 > $100 or < $30.\n\n"
+        "---\n\n"
+        "**Metals:**\n\n"
+        "**Gold/Silver ratio:** Rising = risk-off. Above 80 = elevated fear. Above 90 = extreme.\n\n"
+        "**Real yields vs gold:** Inversely correlated. Falling real rates = gold more attractive "
+        "(lower opportunity cost of holding non-yielding asset).\n\n"
+        "**Silver vs copper:** Both industrial metals. Divergence signals shift between industrial "
+        "vs monetary demand."
     ),
     "divergence": (
-        "SPY-TLT rolling 63-day correlation. **Positive = stocks and bonds moving together** "
-        "(unusual, often signals macro stress). HY-IG spread widening = credit deterioration."
+        "**What:** Cross-asset divergences are early warning signals.\n\n"
+        "**SPY-TLT correlation** (63-day rolling): Normally stocks and bonds move inversely — "
+        "when stocks fall, bonds rally as a safe haven. **When correlation turns positive**, "
+        "stocks and bonds are falling *together*. This usually means macro stress — inflation "
+        "forcing the Fed to tighten while growth slows. Breaks 60/40 portfolio diversification.\n\n"
+        "**HY-IG spread:** When high-yield bonds underperform investment-grade, credit markets "
+        "are pricing in rising default risk. Credit often leads equities by weeks."
     ),
     "geo": (
-        "US (SPY) vs developed ex-US (EFA) vs emerging markets (EEM). Europe (VGK). "
-        "Defense (ITA) vs S&P — Crown tracks this for geopolitical positioning."
+        "**What:** Relative performance of US vs international markets.\n\n"
+        "**SPY vs EFA vs EEM:** SPY = US, EFA = developed ex-US (Europe, Japan, Australia), "
+        "EEM = emerging (China, India, Brazil). When EFA/EEM outperform SPY, global capital is "
+        "rotating away from the US — often driven by dollar weakness or relative valuation.\n\n"
+        "**VGK (Europe):** European equities specifically. Tracks EU economic divergence.\n\n"
+        "**ITA (Defense) vs SPY:** Outperformance signals geopolitical risk being priced in — "
+        "useful for monitoring war/conflict positioning."
     ),
     "tech": (
-        "QQQ (Nasdaq 100) vs IGV (software) vs SOXX (semiconductors). NVIDIA vs QQQ divergence. "
-        "**Crown's thesis: QQQ is the wrong way to own tech** — sub-sector selection matters."
+        "**What:** Tech sub-sector breakdown — 'tech' is not monolithic.\n\n"
+        "**QQQ** = Nasdaq 100 (mega-cap tech-heavy). **IGV** = pure software. **SOXX** = "
+        "semiconductors. These can diverge sharply — AI hype lifts SOXX/NVDA while software "
+        "may lag if growth is slowing.\n\n"
+        "**NVDA vs QQQ:** NVIDIA is QQQ's largest weight. Divergence shows whether the AI trade "
+        "is broadening or narrowing.\n\n"
+        "**Why it matters:** Buying QQQ for 'AI exposure' gives heavy Apple/Microsoft weight "
+        "with diluted semi exposure. Sub-sector selection matters more than the index."
     ),
     "currencies": (
-        "DXY (US Dollar Index). FX pairs with USD strength signal. BTC as digital asset / risk barometer."
+        "**What:** Currency markets and their macro signals.\n\n"
+        "**DXY (Dollar Index):** USD vs 6 major currencies (heavy Euro weight). Strong dollar = "
+        "headwind for emerging markets (dollar debt), commodities (priced in USD), and US "
+        "multinationals (foreign revenue worth less). Weak dollar = tailwind for all three.\n\n"
+        "**FX pairs:** USD/JPY rising = risk-on (yen weakening). EUR/USD rising = dollar "
+        "weakening.\n\n"
+        "**BTC:** Risk/liquidity barometer. Correlates with risk-on assets, inversely with real "
+        "rates. Not a hedge — more like leveraged risk appetite."
     ),
     "sentiment": (
-        "Reddit sentiment from r/wallstreetbets, r/stocks, r/investing. Posts scored with VADER "
-        "sentiment analysis. Per-ticker mentions tracked. 0 = Very Bearish, 100 = Very Bullish."
+        "**What:** Reddit sentiment from finance-focused subreddits.\n\n"
+        "**Sources:** r/wallstreetbets, r/stocks, r/investing. Each post scored using VADER "
+        "sentiment analysis, averaged daily.\n\n"
+        "**Score:** 0 = Very Bearish, 50 = Neutral, 100 = Very Bullish. Per-ticker mentions "
+        "tracked by keyword matching.\n\n"
+        "**How to use:** Reddit sentiment is *contrarian* at extremes. Retail overwhelmingly "
+        "bullish (>70) = caution. Fear dominant (<30) = often marks bottoms. Mid-range = noise."
     ),
 }
 
@@ -228,6 +394,13 @@ def main():
         st.sidebar.markdown(f"*{group}*")
         for sid, name in items:
             st.sidebar.markdown(f"[{name}](#{sid})", unsafe_allow_html=True)
+
+    st.sidebar.divider()
+
+    # Glossary
+    with st.sidebar.expander("📖 Glossary"):
+        for acr, defn in sorted(_GLOSSARY.items()):
+            st.markdown(f"**{acr}** — {defn}")
 
     st.sidebar.divider()
 
@@ -322,7 +495,7 @@ def main():
         with r1_col2:
             st.plotly_chart(
                 gauge_chart(fg["score"], "Fear / Greed", fg["label"]),
-                use_container_width=True,
+                width="stretch",
             )
 
         with r1_col3:
@@ -343,7 +516,7 @@ def main():
                     "Raw Value": str(data["raw_value"]),
                     "Description": data["description"],
                 })
-            st.dataframe(pd.DataFrame(comp_rows), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(comp_rows), hide_index=True, width="stretch")
 
         if not fg["history"].empty:
             hist = fg["history"].loc[start_date:end_date]
@@ -352,7 +525,7 @@ def main():
                 fig.add_hline(y=20, line_dash="dot", line_color="#22c55e", annotation_text="Greed")
                 fig.add_hline(y=80, line_dash="dot", line_color="#ef4444", annotation_text="Fear")
                 fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.2)")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         signal_rows = []
         for key, val in regime_data["signals"].items():
@@ -362,7 +535,7 @@ def main():
             signal_rows.append({"Indicator": indicator, "Signal": val})
         if signal_rows:
             st.subheader("Regime Signals")
-            st.dataframe(pd.DataFrame(signal_rows), hide_index=True, use_container_width=True)
+            st.dataframe(pd.DataFrame(signal_rows), hide_index=True, width="stretch")
 
     # Section 2: Economic Calendar
     _anchor("calendar")
@@ -407,7 +580,7 @@ def main():
                 "days_until": "Days Until",
             })
 
-            st.dataframe(styled, hide_index=True, use_container_width=True)
+            st.dataframe(styled, hide_index=True, width="stretch")
         else:
             st.info("No upcoming releases found. Check your FRED API key.")
 
@@ -441,7 +614,7 @@ def main():
             if curves:
                 st.plotly_chart(
                     yield_curve_snapshot(curves, "Yield Curve Shape"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with yc_col2:
@@ -456,7 +629,7 @@ def main():
                     spread_filtered, "10Y-2Y Spread", db=db, yaxis_title="%"
                 )
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
     # Section 4: Inflation
     _anchor("inflation")
@@ -471,7 +644,7 @@ def main():
                 inf_df = pd.DataFrame({"CPI YoY": cpi, "Core CPI YoY": core_cpi}).loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(inf_df, "CPI Year-over-Year %", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with inf_col2:
@@ -480,7 +653,7 @@ def main():
                 breakevens.columns = ["5Y Breakeven", "10Y Breakeven"]
                 st.plotly_chart(
                     time_series_chart(breakevens, "Breakeven Inflation Rates", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     # Section 5: Labor Market
@@ -498,7 +671,7 @@ def main():
                 st.metric(f"{badge} Unemployment Rate", f"{latest_unrate:.1f}%")
                 st.plotly_chart(
                     time_series_chart(unrate, "Unemployment Rate", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with lab_col2:
@@ -507,7 +680,7 @@ def main():
                 nfp_filtered = nfp.loc[start_date:end_date]
                 st.plotly_chart(
                     bar_chart(nfp_filtered, "Nonfarm Payrolls MoM Change (thousands)"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         claims = query_multiple_series(db, ["ICSA", "CCSA"], start=start_date, end=end_date)
@@ -520,7 +693,7 @@ def main():
                     y1_title="Initial Claims", y2_title="Continued Claims",
                     db=db,
                 ),
-                use_container_width=True,
+                width="stretch",
             )
 
     # Section 6: Credit Deep Dive
@@ -559,7 +732,7 @@ def main():
                 oas_df.columns = ["HY OAS", "IG OAS"]
                 st.plotly_chart(
                     time_series_chart(oas_df, "OAS Spreads (bps)", db=db, yaxis_title="bps"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with oas_col2:
@@ -577,7 +750,7 @@ def main():
                             y1_title="Spread (bps)", y2_title="Z-Score",
                             db=db,
                         ),
-                        use_container_width=True,
+                        width="stretch",
                     )
             except Exception:
                 pass
@@ -590,7 +763,7 @@ def main():
                 hy_yield.name = "HY Effective Yield"
                 st.plotly_chart(
                     time_series_chart(hy_yield, "High Yield Effective Yield", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with yd_col2:
@@ -601,7 +774,7 @@ def main():
                 delinq_df.columns = ["All Loans", "C&I Loans", "SF Residential"]
                 st.plotly_chart(
                     time_series_chart(delinq_df, "Loan Delinquency Rates", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         cv_col1, cv_col2 = st.columns(2)
@@ -613,7 +786,7 @@ def main():
                     impulse_filtered = impulse.loc[start_date:end_date]
                     fig = bar_chart(impulse_filtered, "Credit Impulse (Total Loans YoY %)")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
             except Exception:
                 pass
 
@@ -626,7 +799,7 @@ def main():
                 st.metric(f"{badge} VIX", f"{latest_vix:.1f}")
                 st.plotly_chart(
                     time_series_chart(vix, "VIX (Volatility Index)", db=db),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         fc = query_multiple_series(db, ["NFCI", "STLFSI2"], start=start_date, end=end_date)
@@ -634,7 +807,7 @@ def main():
             fc.columns = ["Chicago Fed NFCI", "St. Louis Fed Stress"]
             st.plotly_chart(
                 time_series_chart(fc, "Financial Conditions Indices", db=db),
-                use_container_width=True,
+                width="stretch",
             )
 
     # Section 7: Monetary Policy
@@ -649,7 +822,7 @@ def main():
                 ff.name = "Fed Funds Rate"
                 st.plotly_chart(
                     time_series_chart(ff, "Effective Fed Funds Rate", db=db, yaxis_title="%"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with mp_col2:
@@ -659,14 +832,14 @@ def main():
                 m2_filtered.name = "M2 YoY %"
                 fig = time_series_chart(m2_filtered, "M2 Money Supply YoY Growth", db=db, yaxis_title="%")
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         walcl = query_series(db, "WALCL", start=start_date, end=end_date)
         if not walcl.empty:
             walcl.name = "Fed Total Assets ($M)"
             st.plotly_chart(
                 time_series_chart(walcl, "Fed Balance Sheet Total Assets", db=db, yaxis_title="$ Millions"),
-                use_container_width=True,
+                width="stretch",
             )
 
     # ============================================================
@@ -690,7 +863,7 @@ def main():
                     breadth_df.columns = [breadth_names.get(c, c) for c in breadth_df.columns]
                     st.plotly_chart(
                         normalized_returns_chart(breadth_df, "SPY vs RSP — Breadth"),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
             with breadth_col2:
@@ -699,7 +872,7 @@ def main():
                     ratio_filtered = ratio.loc[start_date:end_date]
                     fig = time_series_chart(ratio_filtered, "SPY/RSP Ratio (Concentration)", yaxis_title="Ratio")
                     fig.add_hline(y=100, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
             if not ratio.empty and len(ratio) >= 22:
                 bm1, bm2, bm3 = st.columns(3)
@@ -724,7 +897,7 @@ def main():
                     idx_df.columns = [index_names.get(c, c) for c in idx_df.columns]
                     st.plotly_chart(
                         normalized_returns_chart(idx_df, "Index Performance (Normalized)"),
-                        use_container_width=True,
+                        width="stretch",
                     )
 
             with idx_col2:
@@ -737,7 +910,7 @@ def main():
                 if idx_returns:
                     st.plotly_chart(
                         horizontal_bar_chart(idx_returns, "Index Returns (Period)"),
-                        use_container_width=True,
+                        width="stretch",
                     )
         else:
             st.info("No market data loaded. Click **Refresh Market Data** in the sidebar.")
@@ -760,7 +933,7 @@ def main():
             styled = display_df.style.map(_color_cell, subset=value_cols).format(
                 "{:+.1f}%", subset=value_cols, na_rep="—"
             )
-            st.dataframe(styled, use_container_width=True, height=450)
+            st.dataframe(styled, width="stretch", height=450)
 
             sc_col1, sc_col2 = st.columns(2)
             with sc_col1:
@@ -769,7 +942,7 @@ def main():
                     if month_rets:
                         st.plotly_chart(
                             horizontal_bar_chart(month_rets, "1-Month Sector Returns"),
-                            use_container_width=True,
+                            width="stretch",
                         )
             with sc_col2:
                 if "YTD" in sec_df.columns:
@@ -777,7 +950,7 @@ def main():
                     if ytd_rets:
                         st.plotly_chart(
                             horizontal_bar_chart(ytd_rets, "YTD Sector Returns"),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
     # ============================================================
@@ -835,7 +1008,7 @@ def main():
                 oil_df.columns = ["WTI Crude", "Brent Crude"]
                 st.plotly_chart(
                     time_series_chart(oil_df, "WTI vs Brent Crude Oil", db=db, yaxis_title="$/barrel"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with oil_col2:
@@ -844,7 +1017,7 @@ def main():
                 ogr_filtered = ogr.loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(ogr_filtered, "Oil/Gold Ratio (WTI/GLD)", yaxis_title="Ratio"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         # --- Row 2: Metal charts ---
@@ -855,7 +1028,7 @@ def main():
                 gsr_filtered = gsr.loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(gsr_filtered, "Gold/Silver Ratio", yaxis_title="Ratio"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with metals_col2:
@@ -867,7 +1040,7 @@ def main():
                         "Real Yields vs Gold",
                         y1_title="Real Rate %", y2_title="GLD Price",
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         # --- Row 3: Commodity comparisons ---
@@ -879,7 +1052,7 @@ def main():
                 slv_copx.columns = ["Silver (SLV)", "Copper Miners (COPX)"]
                 st.plotly_chart(
                     normalized_returns_chart(slv_copx, "Silver vs Copper Miners"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with metals_col4:
@@ -888,7 +1061,7 @@ def main():
                 comm_df.columns = ["Gold", "Silver", "Crude Oil (USO)"]
                 st.plotly_chart(
                     normalized_returns_chart(comm_df, "Commodities Normalized"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     # Section 11: Cross-Asset Divergence
@@ -906,7 +1079,7 @@ def main():
                     yaxis_title="Correlation",
                 )
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, width="stretch")
 
         with ca_col2:
             sb_df = query_multiple_series(db, ["SPY", "TLT"], start=start_date, end=end_date)
@@ -914,7 +1087,7 @@ def main():
                 sb_df.columns = ["S&P 500", "20Y+ Treasury"]
                 st.plotly_chart(
                     normalized_returns_chart(sb_df, "Stocks vs Bonds"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         ca_col3, ca_col4 = st.columns(2)
@@ -927,7 +1100,7 @@ def main():
                         hi_spread.loc[start_date:end_date], "HY-IG OAS Spread",
                         db=db, yaxis_title="bps",
                     ),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with ca_col4:
@@ -936,7 +1109,7 @@ def main():
                 credit_df.columns = ["High Yield", "Inv. Grade", "20Y+ Treasury"]
                 st.plotly_chart(
                     normalized_returns_chart(credit_df, "Credit & Duration ETFs"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     # Section 12: Geographic Rotation
@@ -951,7 +1124,7 @@ def main():
                 geo_df.columns = ["US (SPY)", "Developed ex-US (EFA)", "Emerging (EEM)"]
                 st.plotly_chart(
                     normalized_returns_chart(geo_df, "US vs Developed vs Emerging"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with geo_col2:
@@ -960,7 +1133,7 @@ def main():
                 eu_df.columns = ["Europe (VGK)", "Developed ex-US (EFA)"]
                 st.plotly_chart(
                     normalized_returns_chart(eu_df, "European Focus"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         geo_col3, geo_col4 = st.columns(2)
@@ -974,7 +1147,7 @@ def main():
             if geo_rets:
                 st.plotly_chart(
                     horizontal_bar_chart(geo_rets, "Geographic Returns (Period)"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with geo_col4:
@@ -983,7 +1156,7 @@ def main():
                 def_df.columns = ["Aerospace & Defense (ITA)", "S&P 500 (SPY)"]
                 st.plotly_chart(
                     normalized_returns_chart(def_df, "Defense vs S&P 500"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
     # Section 13: AI & Tech Sub-sectors
@@ -998,7 +1171,7 @@ def main():
                 tech_df.columns = ["Nasdaq 100 (QQQ)", "Software (IGV)", "Semis (SOXX)"]
                 st.plotly_chart(
                     normalized_returns_chart(tech_df, "QQQ vs Software vs Semiconductors"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         with tech_col2:
@@ -1007,7 +1180,7 @@ def main():
                 nvda_df.columns = ["NVIDIA", "Nasdaq 100 (QQQ)"]
                 st.plotly_chart(
                     normalized_returns_chart(nvda_df, "NVIDIA vs QQQ"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
         tech_rets = {}
@@ -1019,7 +1192,7 @@ def main():
         if tech_rets:
             st.plotly_chart(
                 horizontal_bar_chart(tech_rets, "Tech Sub-sector Returns (Period)"),
-                use_container_width=True,
+                width="stretch",
             )
 
     # ============================================================
@@ -1039,7 +1212,7 @@ def main():
                 dxy.name = "DXY"
                 st.plotly_chart(
                     time_series_chart(dxy, "US Dollar Index (DXY)", yaxis_title="Index"),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             with ccy_col2:
@@ -1068,14 +1241,14 @@ def main():
 
                 if ccy_rows:
                     st.subheader("Currency Strength vs USD")
-                    st.dataframe(pd.DataFrame(ccy_rows), hide_index=True, use_container_width=True)
+                    st.dataframe(pd.DataFrame(ccy_rows), hide_index=True, width="stretch")
 
             btc = query_series(db, "BTC-USD", start=start_date, end=end_date)
             if not btc.empty:
                 btc.name = "BTC/USD"
                 st.plotly_chart(
                     time_series_chart(btc, "Bitcoin", yaxis_title="USD"),
-                    use_container_width=True,
+                    width="stretch",
                 )
         else:
             st.info("No currency data loaded. Click **Refresh Market Data** in the sidebar.")
@@ -1102,7 +1275,7 @@ def main():
             with sent_col1:
                 st.plotly_chart(
                     gauge_chart(sent["overall_score"], "Reddit Sentiment", sent["label"]),
-                    use_container_width=True,
+                    width="stretch",
                 )
 
             with sent_col2:
@@ -1123,7 +1296,7 @@ def main():
                     fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
                     fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
                     fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
             # Row 3: Ticker sentiment ranking
             if settings.sentiment:
@@ -1133,7 +1306,7 @@ def main():
                 )
                 if not ranking.empty:
                     st.subheader("Ticker Sentiment Ranking")
-                    st.dataframe(ranking, hide_index=True, use_container_width=True)
+                    st.dataframe(ranking, hide_index=True, width="stretch")
 
                     # Row 4: Sentiment vs Price for top ticker
                     top_ticker = ranking.iloc[0]["Ticker"]
@@ -1148,7 +1321,7 @@ def main():
                                 f"{top_ticker}: Sentiment vs Price",
                                 y1_title="Sentiment Score", y2_title="Price ($)",
                             ),
-                            use_container_width=True,
+                            width="stretch",
                         )
 
     # Footer

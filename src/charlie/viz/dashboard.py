@@ -95,6 +95,108 @@ def _anchor(section_id: str):
     st.markdown(f'<div id="{section_id}"></div>', unsafe_allow_html=True)
 
 
+def _section_info(explanation: str):
+    """Render a clickable info popover inside a section."""
+    with st.popover("ℹ️"):
+        st.markdown(explanation)
+
+
+def _alert_badge(value: float, thresholds: dict[str, tuple[float, float]]) -> str:
+    """Return emoji badge based on value and threshold ranges.
+
+    thresholds = {"green": (lo, hi), "yellow": (lo, hi), "red": (lo, hi)}
+    """
+    for color, (lo, hi) in thresholds.items():
+        if lo <= value < hi:
+            return {"green": "🟢", "yellow": "🟡", "red": "🔴"}.get(color, "⚪")
+    return "⚪"
+
+
+# Section explanations
+_INFO = {
+    "regime": (
+        "Classifies the economy into 4 states (Expansion, Late Cycle, Contraction, Recovery) "
+        "using 6 signals: yield curve inversion, credit spread z-scores, CPI YoY, HY OAS, "
+        "unemployment trend, and delinquency rates. Score range: -4 (contraction) to +4 (expansion)."
+    ),
+    "fear_greed": (
+        "Composite 0-100 score from 7 market-based components: VIX level, HY-IG credit stress, "
+        "SPY/RSP breadth, SPY-TLT correlation, gold/silver safe haven ratio, yield curve shape, "
+        "and SPY momentum (50d/200d MA). Each percentile-ranked over a 5-year window and "
+        "equal-weighted. **0 = Extreme Greed, 100 = Extreme Fear.**"
+    ),
+    "calendar": (
+        "Upcoming FRED economic release dates. High importance (🔴): CPI, NFP, FOMC, GDP, PCE. "
+        "Medium (🟡): retail sales, housing, industrial production. Data from FRED Release Dates API."
+    ),
+    "yield_curve": (
+        "Treasury yield curve shape across maturities (1M to 30Y). **10Y-2Y spread below zero = "
+        "inverted curve**, historically precedes recessions by 12-18 months."
+    ),
+    "inflation": (
+        "CPI YoY: headline consumer price index year-over-year change. Core CPI excludes food "
+        "and energy. Breakeven rates = market-implied inflation expectations (TIPS spread)."
+    ),
+    "labor": (
+        "Unemployment rate (U-3), nonfarm payrolls month-over-month change, initial claims "
+        "(weekly new filings), continued claims (ongoing benefit recipients)."
+    ),
+    "credit": (
+        "HY OAS: option-adjusted spread on high-yield corporate bonds over treasuries. "
+        "Higher = more stress. HY-IG spread differential isolates credit risk premium. "
+        "Z-scores flag deviations from 1-year mean. NFCI/STLFSI are financial conditions indices."
+    ),
+    "monetary": (
+        "Fed funds rate, M2 money supply growth (YoY), Fed balance sheet total assets. "
+        "M2 contraction is historically rare and signals tight liquidity."
+    ),
+    "breadth": (
+        "SPY (cap-weighted) vs RSP (equal-weighted S&P 500). Rising SPY/RSP ratio = "
+        "concentration in mega-caps. Falling ratio = broad participation (healthier rally). "
+        "**Crown's key principle: breadth reveals what the index hides.**"
+    ),
+    "sectors": (
+        "All 11 GICS sectors. Returns color-coded: green = positive, red = negative. "
+        "Sorted by 1-month return to show sector rotation."
+    ),
+    "metals": (
+        "Gold/Silver ratio: rising = risk-off (gold outperforming). Real yields vs gold: "
+        "inversely correlated — falling real rates are bullish for gold. "
+        "Silver vs copper: industrial demand signal."
+    ),
+    "divergence": (
+        "SPY-TLT rolling 63-day correlation. **Positive = stocks and bonds moving together** "
+        "(unusual, often signals macro stress). HY-IG spread widening = credit deterioration."
+    ),
+    "geo": (
+        "US (SPY) vs developed ex-US (EFA) vs emerging markets (EEM). Europe (VGK). "
+        "Defense (ITA) vs S&P — Crown tracks this for geopolitical positioning."
+    ),
+    "tech": (
+        "QQQ (Nasdaq 100) vs IGV (software) vs SOXX (semiconductors). NVIDIA vs QQQ divergence. "
+        "**Crown's thesis: QQQ is the wrong way to own tech** — sub-sector selection matters."
+    ),
+    "currencies": (
+        "DXY (US Dollar Index). FX pairs with USD strength signal. BTC as digital asset / risk barometer."
+    ),
+    "sentiment": (
+        "Reddit sentiment from r/wallstreetbets, r/stocks, r/investing. Posts scored with VADER "
+        "sentiment analysis. Per-ticker mentions tracked. 0 = Very Bearish, 100 = Very Bullish."
+    ),
+}
+
+# Alert thresholds for key metrics
+_THRESHOLDS = {
+    "vix": {"green": (0, 20), "yellow": (20, 25), "red": (25, float("inf"))},
+    "spread_10y2y": {"red": (-float("inf"), 0), "yellow": (0, 0.5), "green": (0.5, float("inf"))},
+    "hy_oas": {"green": (0, 400), "yellow": (400, 600), "red": (600, float("inf"))},
+    "hy_oas_z": {"green": (-float("inf"), 1.0), "yellow": (1.0, 1.5), "red": (1.5, float("inf"))},
+    "cpi_yoy": {"green": (0, 3), "yellow": (3, 4), "red": (4, float("inf"))},
+    "unemployment": {"green": (0, 4.5), "yellow": (4.5, 6), "red": (6, float("inf"))},
+    "gold_silver": {"green": (0, 80), "yellow": (80, 90), "red": (90, float("inf"))},
+}
+
+
 def main():
     db = get_db()
     settings = get_settings()
@@ -191,6 +293,7 @@ def main():
     # Section 1: Macro Regime Summary + Fear/Greed
     _anchor("regime")
     with st.expander("Macro Regime + Fear/Greed", expanded=True):
+        _section_info(_INFO["regime"] + "\n\n---\n\n**Fear/Greed:** " + _INFO["fear_greed"])
         regime_data = macro_regime(db)
         regime_label = regime_data["regime"].replace("_", " ").title()
         regime_color = REGIME_COLORS.get(regime_data["regime"], "#888")
@@ -208,7 +311,8 @@ def main():
             metric_cols = st.columns(2)
             with metric_cols[0]:
                 if "cpi_yoy" in signals:
-                    st.metric("CPI YoY", f"{signals['cpi_yoy']:.1f}%")
+                    _cpi = signals['cpi_yoy']
+                    st.metric(f"{_alert_badge(_cpi, _THRESHOLDS['cpi_yoy'])} CPI YoY", f"{_cpi:.1f}%")
             with metric_cols[1]:
                 if "credit_spread_zscore" in signals:
                     st.metric("Credit Spread Z", f"{signals['credit_spread_zscore']:.2f}")
@@ -261,6 +365,7 @@ def main():
     # Section 2: Economic Calendar
     _anchor("calendar")
     with st.expander("Economic Calendar", expanded=True):
+        _section_info(_INFO["calendar"])
         @st.cache_data(ttl=3600)
         def _load_calendar(_api_key, _releases, _days):
             return get_economic_calendar(_api_key, _releases, _days)
@@ -312,6 +417,7 @@ def main():
     # Section 3: Yield Curve
     _anchor("yield_curve")
     with st.expander("Yield Curve", expanded=True):
+        _section_info(_INFO["yield_curve"])
         yc_col1, yc_col2 = st.columns(2)
 
         with yc_col1:
@@ -340,6 +446,10 @@ def main():
             spread_10y2y = yield_curve_spread(db, "DGS2", "DGS10")
             if not spread_10y2y.empty:
                 spread_filtered = spread_10y2y.loc[start_date:end_date]
+                latest_spread = spread_filtered.iloc[-1] if not spread_filtered.empty else None
+                if latest_spread is not None:
+                    badge = _alert_badge(latest_spread, _THRESHOLDS["spread_10y2y"])
+                    st.metric(f"{badge} 10Y-2Y Spread", f"{latest_spread:.2f}%")
                 fig = time_series_chart(
                     spread_filtered, "10Y-2Y Spread", db=db, yaxis_title="%"
                 )
@@ -349,6 +459,7 @@ def main():
     # Section 4: Inflation
     _anchor("inflation")
     with st.expander("Inflation", expanded=True):
+        _section_info(_INFO["inflation"])
         inf_col1, inf_col2 = st.columns(2)
 
         with inf_col1:
@@ -373,12 +484,16 @@ def main():
     # Section 5: Labor Market
     _anchor("labor")
     with st.expander("Labor Market", expanded=True):
+        _section_info(_INFO["labor"])
         lab_col1, lab_col2 = st.columns(2)
 
         with lab_col1:
             unrate = query_series(db, "UNRATE", start=start_date, end=end_date)
             if not unrate.empty:
                 unrate.name = "Unemployment Rate"
+                latest_unrate = unrate.iloc[-1]
+                badge = _alert_badge(latest_unrate, _THRESHOLDS["unemployment"])
+                st.metric(f"{badge} Unemployment Rate", f"{latest_unrate:.1f}%")
                 st.plotly_chart(
                     time_series_chart(unrate, "Unemployment Rate", db=db, yaxis_title="%"),
                     use_container_width=True,
@@ -409,6 +524,7 @@ def main():
     # Section 6: Credit Deep Dive
     _anchor("credit")
     with st.expander("Credit Deep Dive", expanded=True):
+        _section_info(_INFO["credit"])
         hy_oas = query_series(db, "BAMLH0A0HYM2")
         ig_oas = query_series(db, "BAMLC0A0CM")
         delinq_all = query_series(db, "DRALACBS")
@@ -416,7 +532,8 @@ def main():
         if not hy_oas.empty:
             m1, m2_col, m3, m4 = st.columns(4)
             with m1:
-                st.metric("HY OAS", f"{hy_oas.iloc[-1]:.0f} bps")
+                _hy = hy_oas.iloc[-1]
+                st.metric(f"{_alert_badge(_hy, _THRESHOLDS['hy_oas'])} HY OAS", f"{_hy:.0f} bps")
             with m2_col:
                 if not ig_oas.empty:
                     spread_val = hy_oas.iloc[-1] - ig_oas.iloc[-1]
@@ -424,7 +541,8 @@ def main():
             with m3:
                 if len(hy_oas) >= 252:
                     z = rolling_zscore(hy_oas, 252)
-                    st.metric("HY OAS Z-Score", f"{z.iloc[-1]:.2f}")
+                    _z_val = z.iloc[-1]
+                    st.metric(f"{_alert_badge(_z_val, _THRESHOLDS['hy_oas_z'])} HY OAS Z-Score", f"{_z_val:.2f}")
             with m4:
                 if not delinq_all.empty:
                     st.metric("All Loans Delinquency", f"{delinq_all.iloc[-1]:.2f}%")
@@ -501,6 +619,9 @@ def main():
             vix = query_series(db, "VIXCLS", start=start_date, end=end_date)
             if not vix.empty:
                 vix.name = "VIX"
+                latest_vix = vix.iloc[-1]
+                badge = _alert_badge(latest_vix, _THRESHOLDS["vix"])
+                st.metric(f"{badge} VIX", f"{latest_vix:.1f}")
                 st.plotly_chart(
                     time_series_chart(vix, "VIX (Volatility Index)", db=db),
                     use_container_width=True,
@@ -517,6 +638,7 @@ def main():
     # Section 7: Monetary Policy
     _anchor("monetary")
     with st.expander("Monetary Policy", expanded=True):
+        _section_info(_INFO["monetary"])
         mp_col1, mp_col2 = st.columns(2)
 
         with mp_col1:
@@ -553,6 +675,7 @@ def main():
     # Section 8: Market Breadth
     _anchor("breadth")
     with st.expander("Market Breadth", expanded=True):
+        _section_info(_INFO["breadth"])
         spy = query_series(db, "SPY", start=start_date, end=end_date)
         if not spy.empty:
             breadth_col1, breadth_col2 = st.columns(2)
@@ -620,6 +743,7 @@ def main():
     # Section 9: Sector Scorecard
     _anchor("sectors")
     with st.expander("Sector Scorecard", expanded=True):
+        _section_info(_INFO["sectors"])
         sec_df = sector_returns(db)
         if not sec_df.empty:
             value_cols = [c for c in ["1W", "1M", "3M", "YTD"] if c in sec_df.columns]
@@ -662,6 +786,7 @@ def main():
     # Section 10: Metals & Commodities
     _anchor("metals")
     with st.expander("Metals & Commodities", expanded=True):
+        _section_info(_INFO["metals"])
         gld = query_series(db, "GLD", start=start_date, end=end_date)
         if not gld.empty:
             met1, met2, met3, met4 = st.columns(4)
@@ -676,7 +801,8 @@ def main():
             gsr = gold_silver_ratio(db)
             with met3:
                 if not gsr.empty:
-                    st.metric("Gold/Silver Ratio", f"{gsr.iloc[-1]:.2f}")
+                    _gsr_val = gsr.iloc[-1]
+                    st.metric(f"{_alert_badge(_gsr_val, _THRESHOLDS['gold_silver'])} Gold/Silver Ratio", f"{_gsr_val:.2f}")
             copx = query_series(db, "COPX", start=start_date, end=end_date)
             with met4:
                 if not copx.empty:
@@ -728,6 +854,7 @@ def main():
     # Section 11: Cross-Asset Divergence
     _anchor("divergence")
     with st.expander("Cross-Asset Divergence", expanded=True):
+        _section_info(_INFO["divergence"])
         ca_col1, ca_col2 = st.columns(2)
 
         with ca_col1:
@@ -775,6 +902,7 @@ def main():
     # Section 12: Geographic Rotation
     _anchor("geo")
     with st.expander("Geographic Rotation", expanded=True):
+        _section_info(_INFO["geo"])
         geo_col1, geo_col2 = st.columns(2)
 
         with geo_col1:
@@ -821,6 +949,7 @@ def main():
     # Section 13: AI & Tech Sub-sectors
     _anchor("tech")
     with st.expander("AI & Tech Sub-sectors", expanded=True):
+        _section_info(_INFO["tech"])
         tech_col1, tech_col2 = st.columns(2)
 
         with tech_col1:
@@ -861,6 +990,7 @@ def main():
     # Section 14: Currencies
     _anchor("currencies")
     with st.expander("Currencies", expanded=True):
+        _section_info(_INFO["currencies"])
         dxy = query_series(db, "DX=F", start=start_date, end=end_date)
         if not dxy.empty:
             ccy_col1, ccy_col2 = st.columns(2)
@@ -913,6 +1043,7 @@ def main():
     # Section 15: Reddit Sentiment
     _anchor("sentiment")
     with st.expander("Reddit Sentiment", expanded=True):
+        _section_info(_INFO["sentiment"])
         sent = sentiment_summary(db)
 
         if not sent["available"]:

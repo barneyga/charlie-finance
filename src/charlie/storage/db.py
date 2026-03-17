@@ -33,6 +33,27 @@ CREATE TABLE IF NOT EXISTS derived_indicators (
     metadata     TEXT,
     PRIMARY KEY (indicator_id, date)
 );
+
+CREATE TABLE IF NOT EXISTS alerts (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    metric_id       TEXT NOT NULL,
+    level           TEXT NOT NULL,
+    message         TEXT NOT NULL,
+    value           REAL,
+    triggered_at    TEXT NOT NULL,
+    resolved_at     TEXT,
+    notified        INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_alerts_metric ON alerts(metric_id);
+CREATE INDEX IF NOT EXISTS idx_alerts_triggered ON alerts(triggered_at);
+
+CREATE TABLE IF NOT EXISTS alert_state (
+    metric_id       TEXT PRIMARY KEY,
+    current_level   TEXT NOT NULL,
+    value           REAL,
+    updated_at      TEXT NOT NULL
+);
 """
 
 

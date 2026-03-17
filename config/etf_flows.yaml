@@ -1,0 +1,49 @@
+# ETF fund flow tracking — shares outstanding changes as creation/redemption proxy.
+# Uses yfinance get_shares_full() — no API key required.
+
+etfs:
+  # US Equity
+  - symbol: SPY
+    name: "S&P 500"
+    category: equity_us
+  - symbol: QQQ
+    name: "Nasdaq 100"
+    category: equity_us
+  - symbol: IWM
+    name: "Russell 2000"
+    category: equity_us
+
+  # Fixed Income
+  - symbol: TLT
+    name: "20Y+ Treasury"
+    category: fixed_income
+  - symbol: HYG
+    name: "High Yield Corporate"
+    category: fixed_income
+  - symbol: LQD
+    name: "IG Corporate"
+    category: fixed_income
+
+  # Commodities
+  - symbol: GLD
+    name: "Gold"
+    category: commodities
+
+  # International
+  - symbol: EEM
+    name: "Emerging Markets"
+    category: international
+  - symbol: EFA
+    name: "Developed ex-US"
+    category: international
+
+  # Sectors
+  - symbol: XLE
+    name: "Energy"
+    category: sectors
+  - symbol: XLF
+    name: "Financials"
+    category: sectors
+  - symbol: XLK
+    name: "Technology"
+    category: sectors

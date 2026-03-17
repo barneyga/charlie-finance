@@ -1,0 +1,103 @@
+# Unified alert thresholds — single source of truth for dashboard badges + alert engine.
+# Each metric has green/yellow/red ranges. null = infinity.
+# direction: "above" means higher values are worse; "below" means lower is worse.
+
+metrics:
+  vix:
+    series_id: VIXCLS
+    name: "VIX"
+    description: "CBOE Volatility Index"
+    direction: above
+    green: [0, 20]
+    yellow: [20, 25]
+    red: [25, null]
+
+  spread_10y2y:
+    series_id: _derived
+    name: "10Y-2Y Spread"
+    description: "Yield curve slope (inverted = recession signal)"
+    direction: below
+    red: [null, 0]
+    yellow: [0, 0.5]
+    green: [0.5, null]
+
+  hy_oas:
+    series_id: BAMLH0A0HYM2
+    name: "HY OAS"
+    description: "High-yield option-adjusted spread (bps)"
+    direction: above
+    green: [0, 400]
+    yellow: [400, 600]
+    red: [600, null]
+
+  hy_oas_z:
+    series_id: _derived
+    name: "HY OAS Z-Score"
+    description: "HY spread vs 1-year rolling average"
+    direction: above
+    green: [null, 1.0]
+    yellow: [1.0, 1.5]
+    red: [1.5, null]
+
+  cpi_yoy:
+    series_id: _derived
+    name: "CPI YoY"
+    description: "Consumer inflation year-over-year"
+    direction: above
+    green: [0, 3]
+    yellow: [3, 4]
+    red: [4, null]
+
+  unemployment:
+    series_id: UNRATE
+    name: "Unemployment Rate"
+    description: "U3 unemployment rate"
+    direction: above
+    green: [0, 4.5]
+    yellow: [4.5, 6]
+    red: [6, null]
+
+  gold_silver:
+    series_id: _derived
+    name: "Gold/Silver Ratio"
+    description: "GLD/SLV ETF price ratio — safe-haven demand proxy"
+    direction: above
+    green: [0, 6.5]
+    yellow: [6.5, 7.5]
+    red: [7.5, null]
+
+  put_call:
+    series_id: PCR_EQUITY
+    name: "Equity Put/Call"
+    description: "CBOE equity put/call ratio"
+    direction: above
+    green: [0, 0.7]
+    yellow: [0.7, 1.0]
+    red: [1.0, null]
+
+  cot_z:
+    series_id: _derived
+    name: "COT Extreme"
+    description: "Max absolute COT positioning z-score"
+    direction: above
+    green: [0, 1.5]
+    yellow: [1.5, 2.0]
+    red: [2.0, null]
+
+  fear_greed_fear:
+    series_id: _composite
+    name: "Extreme Fear"
+    description: "Fear/Greed composite below 20"
+    direction: below
+    red: [null, 20]
+    yellow: [20, 40]
+    green: [40, null]
+
+  fear_greed_greed:
+    series_id: _composite
+    name: "Extreme Greed"
+    description: "Fear/Greed composite above 80"
+    direction: above
+    green: [0, 60]
+    yellow: [60, 80]
+    red: [80, null]

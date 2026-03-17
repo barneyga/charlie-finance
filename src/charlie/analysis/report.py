@@ -15,14 +15,33 @@ from charlie.analysis.derived import (
 from charlie.analysis.stats import rolling_zscore, direction_arrow
 
 
-# Thresholds for alert detection (mirrors dashboard _THRESHOLDS)
-_ALERT_THRESHOLDS = {
-    "vix": (25, "VIX above 25 — elevated volatility"),
-    "hy_oas": (600, "HY OAS above 600 bps — credit stress"),
-    "cpi": (4, "CPI YoY above 4% — high inflation"),
-    "unemployment": (6, "Unemployment above 6%"),
-    "put_call": (1.0, "Put/Call ratio above 1.0 — heavy hedging"),
-}
+# Thresholds loaded from unified config via get_settings().
+# Legacy dict kept as fallback if config loading fails.
+try:
+    from charlie.config import get_settings as _get_settings
+    _settings = _get_settings()
+    _ALERT_THRESHOLDS = {}
+    for t in _settings.alert_thresholds:
+        # Use the red boundary as the simple threshold value
+        red_lo, red_hi = t.red
+        if t.direction == "above":
+            _ALERT_THRESHOLDS[t.metric_id] = (
+                red_lo if red_lo is not None else 0,
+                f"{t.name} — {t.description}",
+            )
+        else:
+            _ALERT_THRESHOLDS[t.metric_id] = (
+                red_hi if red_hi is not None else 0,
+                f"{t.name} — {t.description}",
+            )
+except Exception:
+    _ALERT_THRESHOLDS = {
+        "vix": (25, "VIX above 25 — elevated volatility"),
+        "hy_oas": (600, "HY OAS above 600 bps — credit stress"),
+        "cpi_yoy": (4, "CPI YoY above 4% — high inflation"),
+        "unemployment": (6, "Unemployment above 6%"),
+        "put_call": (1.0, "Put/Call ratio above 1.0 — heavy hedging"),
+    }
 
 
 def _wow(series: pd.Series, periods: int = 5) -> dict | None:

@@ -235,3 +235,78 @@ def cot_summary_table(db: Database, window: int = 52) -> pd.DataFrame:
         })
 
     return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+# ── ETF Flows ────────────────────────────────────────────────
+
+# Category display names
+_FLOW_CATEGORIES = {
+    "equity_us": "US Equity",
+    "fixed_income": "Fixed Income",
+    "commodities": "Commodities",
+    "international": "International",
+    "sectors": "Sectors",
+}
+
+
+def etf_flow_summary(db: Database) -> pd.DataFrame:
+    """Build a summary of ETF dollar volume activity per ETF.
+
+    Uses dollar volume (price × volume) as a flow proxy. Computes the
+    recent dollar volume vs 20-day average to identify demand surges.
+
+    Returns DataFrame with columns: Symbol, Name, Category,
+    Latest ($M), 20d Avg ($M), vs Avg (%), 1W Cum ($M), 1M Cum ($M).
+    """
+    try:
+        from charlie.config import get_settings
+        settings = get_settings()
+    except Exception:
+        return pd.DataFrame()
+
+    rows = []
+    for etf in settings.etf_flow_tickers:
+        dvol = query_series(db, f"FLOW_{etf.symbol}_DVOL")
+        davg = query_series(db, f"FLOW_{etf.symbol}_DAVG")
+        cum = query_series(db, f"FLOW_{etf.symbol}_CUM")
+        if dvol.empty:
+            continue
+
+        latest = float(dvol.iloc[-1])
+        avg20 = float(davg.iloc[-1]) if not davg.empty else 0
+        vs_avg = ((latest / avg20) - 1) * 100 if avg20 > 0 else 0
+
+        def _sum_last_n(s, n):
+            if s.empty:
+                return 0.0
+            return float(s.iloc[-n:].sum()) if len(s) >= n else float(s.sum())
+
+        # Net volume flow (deviation from 20d avg) summed over periods
+        deviation = dvol - davg if not davg.empty else dvol * 0
+        deviation = deviation.dropna()
+
+        rows.append({
+            "Symbol": etf.symbol,
+            "Name": etf.name,
+            "Category": _FLOW_CATEGORIES.get(etf.category, etf.category),
+            "Latest ($M)": round(latest, 0),
+            "20d Avg ($M)": round(avg20, 0),
+            "vs Avg (%)": round(vs_avg, 1),
+            "1W Net ($M)": round(_sum_last_n(deviation, 5), 0),
+            "1M Net ($M)": round(_sum_last_n(deviation, 21), 0),
+        })
+
+    return pd.DataFrame(rows) if rows else pd.DataFrame()
+
+
+def etf_flow_by_category(db: Database) -> pd.DataFrame:
+    """Aggregate ETF net volume flows by asset class category.
+
+    Returns DataFrame with columns: Category, 1W Net ($M), 1M Net ($M).
+    """
+    summary = etf_flow_summary(db)
+    if summary.empty:
+        return pd.DataFrame()
+
+    grouped = summary.groupby("Category")[["1W Net ($M)", "1M Net ($M)"]].sum()
+    return grouped.reset_index().sort_values("1M Net ($M)", ascending=False)

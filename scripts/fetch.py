@@ -55,8 +55,8 @@ def fetch_yahoo(settings, db, args):
 def main():
     parser = argparse.ArgumentParser(description="Fetch macro and market data")
     parser.add_argument(
-        "--source", choices=["fred", "yahoo", "cboe", "cftc", "all"], default="fred",
-        help="Data source to fetch (default: fred)",
+        "--source", choices=["fred", "yahoo", "cboe", "cftc", "etf_flows", "all"],
+        default="fred", help="Data source to fetch (default: fred)",
     )
     parser.add_argument("--category", "-c", help="Fetch a specific category only")
     parser.add_argument("--series", "-s", help="Fetch a single FRED series by ID")
@@ -88,6 +88,12 @@ def main():
             count = cftc.fetch_all()
             print(f"[CFTC] Fetched {count} total observations")
             print(cftc.report())
+        if args.source in ("etf_flows", "all"):
+            from charlie.ingest.etf_flows import ETFFlowIngester
+            flows = ETFFlowIngester(settings, db)
+            count = flows.fetch_all()
+            print(f"[ETF Flows] Fetched {count} total observations")
+            print(flows.report())
 
 
 if __name__ == "__main__":

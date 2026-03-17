@@ -55,6 +55,15 @@ def main():
         if cftc.errors:
             logging.warning(cftc.report())
 
+        # ETF flow data (no API key needed)
+        if settings.etf_flow_tickers:
+            from charlie.ingest.etf_flows import ETFFlowIngester
+            flows = ETFFlowIngester(settings, db)
+            flow_count = flows.fetch_all()
+            logging.info(f"ETF flows update: {flow_count} observations")
+            if flows.errors:
+                logging.warning(flows.report())
+
         # Reddit sentiment data
         if settings.reddit_client_id and settings.sentiment:
             from charlie.ingest.sentiment import SentimentIngester
@@ -65,6 +74,21 @@ def main():
                 logging.warning(sent.report())
         else:
             logging.info("Reddit credentials not set, skipping sentiment fetch")
+
+        # Alert evaluation (state-transition detection)
+        from charlie.analysis.alerts import check_alerts
+        from charlie.analysis.notify import send_alert_email
+
+        new_alerts = check_alerts(db, settings)
+        if new_alerts:
+            logging.info(f"Alerts triggered: {len(new_alerts)}")
+            for a in new_alerts:
+                logging.info(f"  [{a['level'].upper()}] {a['message']}")
+            red_alerts = [a for a in new_alerts if a["level"] == "red"]
+            if red_alerts and settings.smtp_host:
+                send_alert_email(settings, db, red_alerts)
+        else:
+            logging.info("No new alert transitions")
 
 
 if __name__ == "__main__":

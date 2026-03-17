@@ -21,12 +21,14 @@ from charlie.analysis.derived import (
     gold_silver_ratio, oil_gold_ratio, brent_wti_spread,
     stock_bond_correlation, spy_rsp_spread, sector_returns,
     cot_summary_table, COT_CONTRACTS,
+    etf_flow_summary, etf_flow_by_category,
 )
 from charlie.analysis.stats import rolling_zscore, percentile_rank, direction_arrow
 from charlie.analysis.regime import macro_regime, REGIME_COLORS
 from charlie.analysis.composite import fear_greed_score
 from charlie.analysis.calendar import get_economic_calendar
 from charlie.analysis.report import generate_weekly_report
+from charlie.analysis.alerts import get_active_alerts, get_alert_history, build_threshold_dict
 from charlie.analysis.sentiment import sentiment_summary, ticker_sentiment_ranking, sentiment_vs_price
 from charlie.viz.charts import (
     time_series_chart, yield_curve_snapshot, bar_chart, dual_axis_chart,
@@ -109,6 +111,7 @@ def _abbr(text: str) -> str:
 SECTIONS = {
     "Macro Overview": [
         ("report", "Weekly Report"),
+        ("alerts", "Alert History"),
         ("regime", "Macro Regime"),
         ("calendar", "Economic Calendar"),
     ],
@@ -127,6 +130,7 @@ SECTIONS = {
         ("metals", "Commodities & Energy"),
         ("divergence", "Cross-Asset Divergence"),
         ("cot", "COT Positioning"),
+        ("etf_flows", "ETF Flows"),
         ("geo", "Geographic Rotation"),
         ("tech", "AI & Tech Sub-sectors"),
     ],
@@ -194,6 +198,16 @@ _INFO = {
         "COT z-scores > 2.0, fear/greed extremes, etc.).\n\n"
         "**How to use:** Scan alerts first for anything requiring attention. Then read each "
         "section for context. Save or copy the markdown for your records."
+    ),
+    "alerts": (
+        "**What:** Persistent alert history tracking state transitions in key macro metrics.\n\n"
+        "**How it works:** The alert engine runs during each daily update, comparing current "
+        "metric values against green/yellow/red thresholds defined in `config/alerts.yaml`. "
+        "Alerts fire only on *state transitions* (e.g., VIX crossing from yellow → red), "
+        "not every time a threshold is exceeded.\n\n"
+        "**Email:** Red-level alerts are emailed if SMTP is configured in `.env`.\n\n"
+        "**How to read:** Active alerts mean a metric is currently in a warning/critical zone. "
+        "Resolved alerts show when conditions returned to normal."
     ),
     "regime": (
         "**What:** Classifies the economy into 4 states — Expansion, Late Cycle, Contraction, "
@@ -341,6 +355,17 @@ _INFO = {
         "🔴 Extreme (> 2.0 or < -2.0 — contrarian signal).\n\n"
         "**Contracts tracked:** S&P 500 E-mini, Nasdaq 100, Gold, WTI Crude Oil, 10Y Treasury, Euro FX."
     ),
+    "etf_flows": (
+        "**What:** Dollar volume activity tracking for major ETFs as a proxy for fund flows.\n\n"
+        "**How it works:** Dollar volume = price × shares traded. We compare each day's dollar "
+        "volume to its 20-day average. Above-average volume = demand surge; below-average = "
+        "reduced interest. Net flow = cumulative deviation from the 20d average.\n\n"
+        "**How to read:** High net flows into equity ETFs = risk-on demand. High net flows into "
+        "TLT/GLD = flight to safety. The category chart shows where money is most active. "
+        "**vs Avg (%)** highlights current activity relative to recent norms.\n\n"
+        "**Note:** Dollar volume is a *proxy*, not actual fund flows. It measures trading "
+        "activity and conviction, which correlates with directional flow."
+    ),
     "divergence": (
         "**What:** Cross-asset divergences are early warning signals.\n\n"
         "**SPY-TLT correlation** (63-day rolling): Normally stocks and bonds move inversely — "
@@ -390,18 +415,21 @@ _INFO = {
     ),
 }
 
-# Alert thresholds for key metrics
-_THRESHOLDS = {
-    "vix": {"green": (0, 20), "yellow": (20, 25), "red": (25, float("inf"))},
-    "spread_10y2y": {"red": (-float("inf"), 0), "yellow": (0, 0.5), "green": (0.5, float("inf"))},
-    "hy_oas": {"green": (0, 400), "yellow": (400, 600), "red": (600, float("inf"))},
-    "hy_oas_z": {"green": (-float("inf"), 1.0), "yellow": (1.0, 1.5), "red": (1.5, float("inf"))},
-    "cpi_yoy": {"green": (0, 3), "yellow": (3, 4), "red": (4, float("inf"))},
-    "unemployment": {"green": (0, 4.5), "yellow": (4.5, 6), "red": (6, float("inf"))},
-    "gold_silver": {"green": (0, 80), "yellow": (80, 90), "red": (90, float("inf"))},
-    "put_call": {"green": (0, 0.7), "yellow": (0.7, 1.0), "red": (1.0, float("inf"))},
-    "cot_z": {"green": (0, 1.5), "yellow": (1.5, 2.0), "red": (2.0, float("inf"))},
-}
+# Alert thresholds — loaded from unified config/alerts.yaml
+try:
+    _THRESHOLDS = build_threshold_dict(get_settings())
+except Exception:
+    _THRESHOLDS = {
+        "vix": {"green": (0, 20), "yellow": (20, 25), "red": (25, float("inf"))},
+        "spread_10y2y": {"red": (-float("inf"), 0), "yellow": (0, 0.5), "green": (0.5, float("inf"))},
+        "hy_oas": {"green": (0, 400), "yellow": (400, 600), "red": (600, float("inf"))},
+        "hy_oas_z": {"green": (-float("inf"), 1.0), "yellow": (1.0, 1.5), "red": (1.5, float("inf"))},
+        "cpi_yoy": {"green": (0, 3), "yellow": (3, 4), "red": (4, float("inf"))},
+        "unemployment": {"green": (0, 4.5), "yellow": (4.5, 6), "red": (6, float("inf"))},
+        "gold_silver": {"green": (0, 80), "yellow": (80, 90), "red": (90, float("inf"))},
+        "put_call": {"green": (0, 0.7), "yellow": (0.7, 1.0), "red": (1.0, float("inf"))},
+        "cot_z": {"green": (0, 1.5), "yellow": (1.5, 2.0), "red": (2.0, float("inf"))},
+    }
 
 
 def main():
@@ -528,6 +556,41 @@ def main():
             filepath = reports_dir / f"{datetime.now().strftime('%Y-%m-%d')}.md"
             filepath.write_text(report["markdown"], encoding="utf-8")
             st.success(f"Saved to {filepath}")
+
+    # Section: Alert History
+    _anchor("alerts")
+    with st.expander("Alert History", expanded=False):
+        _section_info(_INFO["alerts"])
+
+        active = get_active_alerts(db)
+        history = get_alert_history(db, limit=30)
+
+        if active:
+            st.markdown("### Active Alerts")
+            for a in active:
+                badge = {"red": "🔴", "yellow": "🟡"}.get(a["level"], "⚪")
+                st.markdown(f"{badge} **{a['message']}** — *{a['triggered_at']}*")
+            st.divider()
+        else:
+            st.success("No active alerts — all metrics within normal ranges.")
+
+        if history:
+            st.markdown("### Recent History")
+            hist_rows = []
+            for a in history:
+                badge = {"red": "🔴", "yellow": "🟡", "green": "🟢"}.get(a["level"], "⚪")
+                status = "Resolved" if a.get("resolved_at") else "**Active**"
+                hist_rows.append({
+                    "Time": a["triggered_at"],
+                    "Level": f"{badge} {a['level'].upper()}",
+                    "Alert": a["message"],
+                    "Value": f"{a['value']:.2f}" if a["value"] is not None else "—",
+                    "Status": status,
+                    "Resolved": a.get("resolved_at") or "—",
+                })
+            st.dataframe(pd.DataFrame(hist_rows), use_container_width=True, hide_index=True)
+        elif not active:
+            st.info("No alert history yet. Alerts are generated during daily updates (`daily_update.py`).")
 
     # Section 1: Macro Regime Summary + Fear/Greed
     _anchor("regime")
@@ -1294,6 +1357,97 @@ def main():
                     fig.add_hline(y=-2, line_dash="dot", line_color="#22c55e", annotation_text="Extreme Short")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
                     st.plotly_chart(fig, width="stretch")
+
+    # Section: ETF Flows
+    _anchor("etf_flows")
+    with st.expander("ETF Flows", expanded=True):
+        _section_info(_INFO["etf_flows"])
+
+        flow_summary = etf_flow_summary(db)
+        flow_by_cat = etf_flow_by_category(db)
+
+        if flow_summary.empty:
+            st.warning(
+                "No ETF flow data. Run `python scripts/fetch.py --source etf_flows` to fetch."
+            )
+        else:
+            # Category rotation bar chart
+            if not flow_by_cat.empty:
+                st.subheader("Category Net Volume Flows")
+                import plotly.graph_objects as go
+
+                cat_fig = go.Figure()
+                for period in ["1W Net ($M)", "1M Net ($M)"]:
+                    colors = [
+                        "#22c55e" if v >= 0 else "#ef4444"
+                        for v in flow_by_cat[period]
+                    ]
+                    cat_fig.add_trace(go.Bar(
+                        name=period.replace(" ($M)", ""),
+                        x=flow_by_cat["Category"],
+                        y=flow_by_cat[period],
+                        marker_color=colors,
+                    ))
+                cat_fig.update_layout(
+                    barmode="group",
+                    title="Net Volume Flow by Asset Class ($M vs 20d Avg)",
+                    yaxis_title="Net Flow ($M)",
+                    template="plotly_dark",
+                    height=350,
+                )
+                st.plotly_chart(cat_fig, use_container_width=True)
+
+            # Per-ETF flow table
+            st.subheader("ETF Dollar Volume Activity")
+
+            def _flow_color(val):
+                if val > 0:
+                    return f"🟢 +{val:,.0f}"
+                elif val < 0:
+                    return f"🔴 {val:,.0f}"
+                return "⚪ 0"
+
+            display = flow_summary.copy()
+            for col in ["1W Net ($M)", "1M Net ($M)"]:
+                display[col] = display[col].apply(_flow_color)
+            display["vs Avg (%)"] = display["vs Avg (%)"].apply(
+                lambda v: f"{'🟢' if v > 0 else '🔴'} {v:+.1f}%"
+            )
+            st.dataframe(display, use_container_width=True, hide_index=True)
+
+            # Cumulative flow chart for top ETFs
+            st.subheader("Cumulative Flows")
+            flow_cols = st.columns(2)
+            equity_etfs = [e for e in settings.etf_flow_tickers if e.category == "equity_us"]
+            bond_etfs = [e for e in settings.etf_flow_tickers if e.category == "fixed_income"]
+
+            with flow_cols[0]:
+                eq_series = {}
+                for etf in equity_etfs:
+                    s = query_series(db, f"FLOW_{etf.symbol}_CUM")
+                    if not s.empty:
+                        eq_series[etf.symbol] = s
+                if eq_series:
+                    eq_df = pd.DataFrame(eq_series).dropna(how="all")
+                    if not eq_df.empty:
+                        st.plotly_chart(
+                            time_series_chart(eq_df, "US Equity ETF Cumulative Flows ($M)"),
+                            use_container_width=True,
+                        )
+
+            with flow_cols[1]:
+                bd_series = {}
+                for etf in bond_etfs:
+                    s = query_series(db, f"FLOW_{etf.symbol}_CUM")
+                    if not s.empty:
+                        bd_series[etf.symbol] = s
+                if bd_series:
+                    bd_df = pd.DataFrame(bd_series).dropna(how="all")
+                    if not bd_df.empty:
+                        st.plotly_chart(
+                            time_series_chart(bd_df, "Fixed Income ETF Cumulative Flows ($M)"),
+                            use_container_width=True,
+                        )
 
     # Section 13: Geographic Rotation
     _anchor("geo")

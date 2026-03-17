@@ -51,6 +51,25 @@ class SentimentConfig:
 
 
 @dataclass(frozen=True)
+class AlertThreshold:
+    metric_id: str
+    series_id: str
+    name: str
+    description: str
+    direction: str  # "above" or "below"
+    green: tuple[float | None, float | None]
+    yellow: tuple[float | None, float | None]
+    red: tuple[float | None, float | None]
+
+
+@dataclass(frozen=True)
+class ETFFlowConfig:
+    symbol: str
+    name: str
+    category: str
+
+
+@dataclass(frozen=True)
 class Settings:
     fred_api_key: str
     db_path: Path
@@ -63,6 +82,14 @@ class Settings:
     reddit_client_secret: str = ""
     reddit_user_agent: str = "charlie-finance/0.1"
     sentiment: SentimentConfig | None = None
+    alert_thresholds: tuple[AlertThreshold, ...] = ()
+    etf_flow_tickers: tuple[ETFFlowConfig, ...] = ()
+    # SMTP settings for email alerts (optional)
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    alert_email_to: str = ""
 
     def series_by_category(self, category: str) -> list[SeriesConfig]:
         return [s for s in self.series if s.category == category]
@@ -171,6 +198,44 @@ def get_settings() -> Settings:
     reddit_client_secret = os.getenv("REDDIT_CLIENT_SECRET", "")
     reddit_user_agent = os.getenv("REDDIT_USER_AGENT", "charlie-finance/0.1")
 
+    # Load alert thresholds
+    alerts_path = PROJECT_ROOT / "config" / "alerts.yaml"
+    all_alerts: list[AlertThreshold] = []
+    if alerts_path.exists():
+        with open(alerts_path) as f:
+            alerts_raw = yaml.safe_load(f)
+        for metric_id, m in (alerts_raw or {}).get("metrics", {}).items():
+            all_alerts.append(AlertThreshold(
+                metric_id=metric_id,
+                series_id=m["series_id"],
+                name=m["name"],
+                description=m["description"],
+                direction=m["direction"],
+                green=tuple(m["green"]),
+                yellow=tuple(m["yellow"]),
+                red=tuple(m["red"]),
+            ))
+
+    # Load ETF flow tickers
+    etf_flows_path = PROJECT_ROOT / "config" / "etf_flows.yaml"
+    all_etf_flows: list[ETFFlowConfig] = []
+    if etf_flows_path.exists():
+        with open(etf_flows_path) as f:
+            etf_raw = yaml.safe_load(f)
+        for e in (etf_raw or {}).get("etfs", []):
+            all_etf_flows.append(ETFFlowConfig(
+                symbol=e["symbol"],
+                name=e["name"],
+                category=e["category"],
+            ))
+
+    # SMTP settings for email alerts
+    smtp_host = os.getenv("SMTP_HOST", "")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER", "")
+    smtp_password = os.getenv("SMTP_PASSWORD", "")
+    alert_email_to = os.getenv("ALERT_EMAIL_TO", "")
+
     return Settings(
         fred_api_key=fred_api_key,
         db_path=db_path,
@@ -183,4 +248,11 @@ def get_settings() -> Settings:
         reddit_client_secret=reddit_client_secret,
         reddit_user_agent=reddit_user_agent,
         sentiment=sentiment_cfg,
+        alert_thresholds=tuple(all_alerts),
+        etf_flow_tickers=tuple(all_etf_flows),
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user,
+        smtp_password=smtp_password,
+        alert_email_to=alert_email_to,
     )

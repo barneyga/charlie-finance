@@ -39,6 +39,14 @@ def main():
         if yahoo.errors:
             logging.warning(yahoo.report())
 
+        # CBOE put/call ratio (no API key needed)
+        from charlie.ingest.cboe import CBOEIngester
+        cboe = CBOEIngester(settings, db)
+        cboe_count = cboe.fetch_all()
+        logging.info(f"CBOE update: {cboe_count} observations")
+        if cboe.errors:
+            logging.warning(cboe.report())
+
         # Reddit sentiment data
         if settings.reddit_client_id and settings.sentiment:
             from charlie.ingest.sentiment import SentimentIngester

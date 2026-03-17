@@ -152,6 +152,22 @@ def fear_greed_score(db: Database) -> dict:
     except Exception:
         pass
 
+    # 8. Put/Call Ratio — high ratio = fear (defensive hedging)
+    try:
+        pcr = query_series(db, "PCR_EQUITY")
+        if len(pcr) >= 60:
+            pcr.name = "put_call_ratio"
+            # Higher put/call = more fear (no inversion needed)
+            pct = _compute_component(pcr, invert=False)
+            component_series["Put/Call"] = pct
+            components["Put/Call"] = {
+                "score": round(pct.iloc[-1], 1),
+                "raw_value": round(pcr.iloc[-1], 3),
+                "description": "CBOE equity put/call ratio",
+            }
+    except Exception:
+        pass
+
     # Composite score = simple average of all available components
     if not components:
         return {

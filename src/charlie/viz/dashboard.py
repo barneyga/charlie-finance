@@ -79,6 +79,8 @@ _GLOSSARY = {
     "WAL": "Write-Ahead Logging",
     "FRED": "Federal Reserve Economic Data",
     "VADER": "Valence Aware Dictionary for Sentiment Reasoning",
+    "PCR": "Put/Call Ratio",
+    "CBOE": "Chicago Board Options Exchange",
     "PRAW": "Python Reddit API Wrapper",
     "ETF": "Exchange-Traded Fund",
     "MA": "Moving Average",
@@ -253,9 +255,14 @@ _INFO = {
         "deviations. Above 1.5 = unusually wide, something is brewing.\n\n"
         "**VIX:** Implied volatility of S&P 500 options. Under 20 = calm, over 25 = elevated, "
         "over 35 = panic.\n\n"
+        "**Put/Call Ratio (PCR):** Ratio of put option volume to call option volume from CBOE. "
+        "High PCR (>1.0) = heavy put buying (hedging/fear) — contrarian bullish signal. "
+        "Low PCR (<0.7) = heavy call buying (complacency) — contrarian bearish signal. "
+        "The 10-day moving average smooths daily noise.\n\n"
         "**NFCI / STLFSI:** Financial conditions indices. Positive = tighter than average "
         "(restrictive). Negative = loose (accommodative).\n\n"
-        "**Alert thresholds:** HY OAS: 🟢 < 400, 🟡 400-600, 🔴 > 600. VIX: 🟢 < 20, 🟡 20-25, 🔴 > 25."
+        "**Alert thresholds:** HY OAS: 🟢 < 400, 🟡 400-600, 🔴 > 600. VIX: 🟢 < 20, 🟡 20-25, 🔴 > 25. "
+        "Put/Call: 🟢 < 0.7, 🟡 0.7-1.0, 🔴 > 1.0."
     ),
     "monetary": (
         "**What:** Fed policy and money supply.\n\n"
@@ -362,6 +369,7 @@ _THRESHOLDS = {
     "cpi_yoy": {"green": (0, 3), "yellow": (3, 4), "red": (4, float("inf"))},
     "unemployment": {"green": (0, 4.5), "yellow": (4.5, 6), "red": (6, float("inf"))},
     "gold_silver": {"green": (0, 80), "yellow": (80, 90), "red": (90, float("inf"))},
+    "put_call": {"green": (0, 0.7), "yellow": (0.7, 1.0), "red": (1.0, float("inf"))},
 }
 
 
@@ -801,6 +809,35 @@ def main():
                     time_series_chart(vix, "VIX (Volatility Index)", db=db),
                     width="stretch",
                 )
+
+        pcr_col1, pcr_col2 = st.columns(2)
+
+        with pcr_col1:
+            pcr_equity = query_series(db, "PCR_EQUITY", start=start_date, end=end_date)
+            if not pcr_equity.empty:
+                _pcr_val = pcr_equity.iloc[-1]
+                badge = _alert_badge(_pcr_val, _THRESHOLDS["put_call"])
+                st.metric(f"{badge} Equity Put/Call", f"{_pcr_val:.2f}")
+                # Add 10-day MA overlay
+                pcr_ma = pcr_equity.rolling(10).mean()
+                pcr_df = pd.DataFrame({"Put/Call Ratio": pcr_equity, "10d MA": pcr_ma}).dropna()
+                if not pcr_df.empty:
+                    st.plotly_chart(
+                        time_series_chart(pcr_df, "CBOE Equity Put/Call Ratio", yaxis_title="Ratio"),
+                        width="stretch",
+                    )
+
+        with pcr_col2:
+            pcr_total = query_series(db, "PCR_TOTAL", start=start_date, end=end_date)
+            if not pcr_total.empty:
+                st.metric("Total Put/Call", f"{pcr_total.iloc[-1]:.2f}")
+                pcr_t_ma = pcr_total.rolling(10).mean()
+                pcr_t_df = pd.DataFrame({"Put/Call Ratio": pcr_total, "10d MA": pcr_t_ma}).dropna()
+                if not pcr_t_df.empty:
+                    st.plotly_chart(
+                        time_series_chart(pcr_t_df, "CBOE Total Put/Call Ratio", yaxis_title="Ratio"),
+                        width="stretch",
+                    )
 
         fc = query_multiple_series(db, ["NFCI", "STLFSI2"], start=start_date, end=end_date)
         if not fc.empty:

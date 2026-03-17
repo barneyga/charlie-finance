@@ -436,43 +436,13 @@ def main():
     db = get_db()
     settings = get_settings()
 
-    # Screenshot mode — expand all sections, hide sidebar
+    # Screenshot mode — used by scripts/screenshot.py (headless Playwright)
     screenshot_mode = st.query_params.get("screenshot") == "true"
+    _expand_all = screenshot_mode
 
     # -- Sidebar --
     st.sidebar.title("Charlie Finance")
     st.sidebar.caption("Macro Analysis Dashboard")
-
-    screenshot_toggle = st.sidebar.checkbox(
-        "📸 Screenshot mode", value=screenshot_mode,
-        help="Expand all sections for full-page capture",
-    )
-    if screenshot_toggle != screenshot_mode:
-        if screenshot_toggle:
-            st.query_params["screenshot"] = "true"
-        else:
-            st.query_params.pop("screenshot", None)
-        st.rerun()
-
-    # In screenshot mode: hide sidebar, expand all sections
-    _expand_all = screenshot_mode
-    if screenshot_mode:
-        st.markdown("""<style>
-        /* Hide sidebar */
-        [data-testid="stSidebar"] { display: none; }
-        .stMainBlockContainer { max-width: 100%; padding-left: 1rem; padding-right: 1rem; }
-        /* Override Streamlit's fixed-height containers so Firefox full-page capture works */
-        .stApp, [data-testid="stAppViewContainer"], .stMainBlockContainer,
-        [data-testid="stVerticalBlock"], section.main,
-        [data-testid="stAppViewBlockContainer"] {
-            height: auto !important;
-            min-height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            position: static !important;
-        }
-        .stApp > header { display: none; }
-        </style>""", unsafe_allow_html=True)
 
     # Data freshness
     freshness = _data_freshness(db)
@@ -547,6 +517,25 @@ def main():
                 st.sidebar.text(ingester.report())
                 st.cache_resource.clear()
                 st.rerun()
+
+    if st.sidebar.button("📸 Screenshot"):
+        with st.sidebar.status("Capturing full-page screenshot..."):
+            import subprocess
+            result = subprocess.run(
+                [sys.executable, str(Path(__file__).resolve().parent.parent.parent.parent / "scripts" / "screenshot.py"),
+                 "--port", "8501", "--wait", "12"],
+                capture_output=True, text=True, timeout=90,
+            )
+            if result.returncode == 0:
+                # Parse output path from script
+                for line in result.stdout.splitlines():
+                    if "saved to" in line.lower():
+                        st.sidebar.success(line.strip())
+                        break
+                else:
+                    st.sidebar.success("Screenshot saved to screenshots/")
+            else:
+                st.sidebar.error(f"Screenshot failed: {result.stderr.strip()[:200]}")
 
     # Check if we have data
     meta = get_all_series_meta(db)

@@ -573,7 +573,6 @@ def main():
             st.code(report["markdown"], language="markdown")
 
         if st.button("Save Report"):
-            from pathlib import Path
             reports_dir = Path(settings.db_path).parent.parent / "reports"
             reports_dir.mkdir(exist_ok=True)
             filepath = reports_dir / f"{datetime.now().strftime('%Y-%m-%d')}.md"

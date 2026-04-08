@@ -395,6 +395,8 @@ _INFO = {
         "EEM = emerging (China, India, Brazil). When EFA/EEM outperform SPY, global capital is "
         "rotating away from the US — often driven by dollar weakness or relative valuation.\n\n"
         "**VGK (Europe):** European equities specifically. Tracks EU economic divergence.\n\n"
+        "**EIS (Israel):** iShares MSCI Israel ETF. Directly reflects Israeli market conditions "
+        "and geopolitical risk — useful for monitoring conflict-related market impact.\n\n"
         "**ITA (Defense) vs SPY:** Outperformance signals geopolitical risk being priced in — "
         "useful for monitoring war/conflict positioning."
     ),
@@ -1852,20 +1854,24 @@ def main():
         geo_col1, geo_col2 = st.columns(2)
 
         with geo_col1:
-            geo_df = query_multiple_series(db, ["SPY", "EFA", "EEM"], start=start_date, end=end_date)
+            _rename = {"SPY": "US (SPY)", "EFA": "Developed ex-US (EFA)", "EEM": "Emerging (EEM)", "EIS": "Israel (EIS)"}
+            geo_df = query_multiple_series(db, list(_rename.keys()), start=start_date, end=end_date)
+            geo_df = geo_df.dropna(axis=1, how="all")
             if not geo_df.empty:
-                geo_df.columns = ["US (SPY)", "Developed ex-US (EFA)", "Emerging (EEM)"]
+                geo_df.columns = [_rename.get(c, c) for c in geo_df.columns]
                 st.plotly_chart(
-                    normalized_returns_chart(geo_df, "US vs Developed vs Emerging"),
+                    normalized_returns_chart(geo_df, "US vs Developed vs Emerging vs Israel"),
                     use_container_width=True,
                 )
 
         with geo_col2:
-            eu_df = query_multiple_series(db, ["VGK", "EFA"], start=start_date, end=end_date)
+            _rename2 = {"VGK": "Europe (VGK)", "EFA": "Developed ex-US (EFA)", "EIS": "Israel (EIS)"}
+            eu_df = query_multiple_series(db, list(_rename2.keys()), start=start_date, end=end_date)
+            eu_df = eu_df.dropna(axis=1, how="all")
             if not eu_df.empty:
-                eu_df.columns = ["Europe (VGK)", "Developed ex-US (EFA)"]
+                eu_df.columns = [_rename2.get(c, c) for c in eu_df.columns]
                 st.plotly_chart(
-                    normalized_returns_chart(eu_df, "European Focus"),
+                    normalized_returns_chart(eu_df, "European & Israel Focus"),
                     use_container_width=True,
                 )
 
@@ -1873,7 +1879,7 @@ def main():
 
         with geo_col3:
             geo_rets = {}
-            for sym, label in [("SPY", "US"), ("EFA", "Developed"), ("EEM", "Emerging"), ("VGK", "Europe")]:
+            for sym, label in [("SPY", "US"), ("EFA", "Developed"), ("EEM", "Emerging"), ("VGK", "Europe"), ("EIS", "Israel")]:
                 s = query_series(db, sym, start=start_date, end=end_date)
                 if len(s) >= 2:
                     geo_rets[label] = ((s.iloc[-1] / s.iloc[0]) - 1) * 100

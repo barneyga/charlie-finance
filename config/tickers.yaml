@@ -78,6 +78,8 @@ categories:
         name: "Emerging Markets"
       - symbol: VGK
         name: "Europe"
+      - symbol: EIS
+        name: "Israel"
 
   defense:
     description: "Defense and aerospace"

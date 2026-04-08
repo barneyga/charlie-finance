@@ -804,7 +804,7 @@ def main():
                     "Status": status,
                     "Resolved": a.get("resolved_at") or "—",
                 })
-            st.dataframe(pd.DataFrame(hist_rows), width="stretch", hide_index=True)
+            st.dataframe(pd.DataFrame(hist_rows), use_container_width=True, hide_index=True)
         elif not active_alerts:
             st.info("No alert history yet. Alerts are generated during daily updates (`daily_update.py`).")
 
@@ -839,7 +839,7 @@ def main():
         with r1_col2:
             st.plotly_chart(
                 gauge_chart(fg["score"], "Fear / Greed", fg["label"]),
-                width="stretch",
+                use_container_width=True,
             )
 
         with r1_col3:
@@ -860,7 +860,7 @@ def main():
                     "Raw Value": str(data["raw_value"]),
                     "Description": data["description"],
                 })
-            st.dataframe(pd.DataFrame(comp_rows), hide_index=True, width="stretch")
+            st.dataframe(pd.DataFrame(comp_rows), hide_index=True, use_container_width=True)
 
             # Safe Haven sub-signal breakdown
             safe_haven_data = fg["components"].get("Safe Haven", {})
@@ -875,7 +875,7 @@ def main():
                         "Score": f"{_sh_badge} {_sh_score:.0f}",
                         "Raw Value": f"{data['raw_value']}",
                     })
-                st.dataframe(pd.DataFrame(sh_rows), hide_index=True, width="stretch")
+                st.dataframe(pd.DataFrame(sh_rows), hide_index=True, use_container_width=True)
 
         if not fg["history"].empty:
             hist = fg["history"].loc[start_date:end_date]
@@ -884,7 +884,7 @@ def main():
                 fig.add_hline(y=20, line_dash="dot", line_color="#22c55e", annotation_text="Greed")
                 fig.add_hline(y=80, line_dash="dot", line_color="#ef4444", annotation_text="Fear")
                 fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.2)")
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
         signal_rows = []
         for key, val in regime_data["signals"].items():
@@ -894,7 +894,7 @@ def main():
             signal_rows.append({"Indicator": indicator, "Signal": val})
         if signal_rows:
             st.subheader("Regime Signals")
-            st.dataframe(pd.DataFrame(signal_rows), hide_index=True, width="stretch")
+            st.dataframe(pd.DataFrame(signal_rows), hide_index=True, use_container_width=True)
 
         # --- Good News Stops Working (Crown signal) ---
         try:
@@ -930,7 +930,7 @@ def main():
                             "Release": ev["name"],
                             "SPY Return": f"{badge} {ret:+.2f}%",
                         })
-                    st.dataframe(pd.DataFrame(ev_rows), hide_index=True, width="stretch")
+                    st.dataframe(pd.DataFrame(ev_rows), hide_index=True, use_container_width=True)
         except Exception:
             pass
 
@@ -987,7 +987,7 @@ def main():
                 "days_until": "Days Until",
             })
 
-            st.dataframe(styled, hide_index=True, width="stretch")
+            st.dataframe(styled, hide_index=True, use_container_width=True)
         else:
             st.info("No upcoming releases found. Check your FRED API key.")
 
@@ -1021,7 +1021,7 @@ def main():
             if curves:
                 st.plotly_chart(
                     yield_curve_snapshot(curves, "Yield Curve Shape"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with yc_col2:
@@ -1036,7 +1036,7 @@ def main():
                     spread_filtered, "10Y-2Y Spread", db=db, yaxis_title="%"
                 )
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
     # Section 4: Inflation
     _anchor("inflation")
@@ -1051,7 +1051,7 @@ def main():
                 inf_df = pd.DataFrame({"CPI YoY": cpi, "Core CPI YoY": core_cpi}).loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(inf_df, "CPI Year-over-Year %", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with inf_col2:
@@ -1060,7 +1060,7 @@ def main():
                 breakevens.columns = ["5Y Breakeven", "10Y Breakeven"]
                 st.plotly_chart(
                     time_series_chart(breakevens, "Breakeven Inflation Rates", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
     # Section 5: Labor Market
@@ -1078,7 +1078,7 @@ def main():
                 st.metric(f"{badge} Unemployment Rate", f"{latest_unrate:.1f}%")
                 st.plotly_chart(
                     time_series_chart(unrate, "Unemployment Rate", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with lab_col2:
@@ -1087,7 +1087,7 @@ def main():
                 nfp_filtered = nfp.loc[start_date:end_date]
                 st.plotly_chart(
                     bar_chart(nfp_filtered, "Nonfarm Payrolls MoM Change (thousands)"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         claims = query_multiple_series(db, ["ICSA", "CCSA"], start=start_date, end=end_date)
@@ -1100,7 +1100,7 @@ def main():
                     y1_title="Initial Claims", y2_title="Continued Claims",
                     db=db,
                 ),
-                width="stretch",
+                use_container_width=True,
             )
 
     # Section 6: Credit Deep Dive
@@ -1139,7 +1139,7 @@ def main():
                 oas_df.columns = ["HY OAS", "IG OAS"]
                 st.plotly_chart(
                     time_series_chart(oas_df, "OAS Spreads (bps)", db=db, yaxis_title="bps"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with oas_col2:
@@ -1157,7 +1157,7 @@ def main():
                             y1_title="Spread (bps)", y2_title="Z-Score",
                             db=db,
                         ),
-                        width="stretch",
+                        use_container_width=True,
                     )
             except Exception:
                 pass
@@ -1170,7 +1170,7 @@ def main():
                 hy_yield.name = "HY Effective Yield"
                 st.plotly_chart(
                     time_series_chart(hy_yield, "High Yield Effective Yield", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with yd_col2:
@@ -1181,7 +1181,7 @@ def main():
                 delinq_df.columns = ["All Loans", "C&I Loans", "SF Residential"]
                 st.plotly_chart(
                     time_series_chart(delinq_df, "Loan Delinquency Rates", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         cv_col1, cv_col2 = st.columns(2)
@@ -1193,7 +1193,7 @@ def main():
                     impulse_filtered = impulse.loc[start_date:end_date]
                     fig = bar_chart(impulse_filtered, "Credit Impulse (Total Loans YoY %)")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
             except Exception:
                 pass
 
@@ -1206,7 +1206,7 @@ def main():
                 st.metric(f"{badge} VIX", f"{latest_vix:.1f}")
                 st.plotly_chart(
                     time_series_chart(vix, "VIX (Volatility Index)", db=db),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         # --- VIX vs Realized Volatility (Crown signal) ---
@@ -1243,7 +1243,7 @@ def main():
                         )
                         fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,0,0,0.4)",
                                       annotation_text="Complacency line", yref="y2")
-                        st.plotly_chart(fig, width="stretch")
+                        st.plotly_chart(fig, use_container_width=True)
         except Exception:
             pass
 
@@ -1261,7 +1261,7 @@ def main():
                 if not pcr_df.empty:
                     st.plotly_chart(
                         time_series_chart(pcr_df, "CBOE Equity Put/Call Ratio", yaxis_title="Ratio"),
-                        width="stretch",
+                        use_container_width=True,
                     )
 
         with pcr_col2:
@@ -1273,7 +1273,7 @@ def main():
                 if not pcr_t_df.empty:
                     st.plotly_chart(
                         time_series_chart(pcr_t_df, "CBOE Total Put/Call Ratio", yaxis_title="Ratio"),
-                        width="stretch",
+                        use_container_width=True,
                     )
 
         fc = query_multiple_series(db, ["NFCI", "STLFSI2"], start=start_date, end=end_date)
@@ -1281,7 +1281,7 @@ def main():
             fc.columns = ["Chicago Fed NFCI", "St. Louis Fed Stress"]
             st.plotly_chart(
                 time_series_chart(fc, "Financial Conditions Indices", db=db),
-                width="stretch",
+                use_container_width=True,
             )
 
     # Section 7: Monetary Policy
@@ -1296,7 +1296,7 @@ def main():
                 ff.name = "Fed Funds Rate"
                 st.plotly_chart(
                     time_series_chart(ff, "Effective Fed Funds Rate", db=db, yaxis_title="%"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with mp_col2:
@@ -1306,14 +1306,14 @@ def main():
                 m2_filtered.name = "M2 YoY %"
                 fig = time_series_chart(m2_filtered, "M2 Money Supply YoY Growth", db=db, yaxis_title="%")
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
         walcl = query_series(db, "WALCL", start=start_date, end=end_date)
         if not walcl.empty:
             walcl.name = "Fed Total Assets ($M)"
             st.plotly_chart(
                 time_series_chart(walcl, "Fed Balance Sheet Total Assets", db=db, yaxis_title="$ Millions"),
-                width="stretch",
+                use_container_width=True,
             )
 
     # ============================================================
@@ -1337,7 +1337,7 @@ def main():
                     breadth_df.columns = [breadth_names.get(c, c) for c in breadth_df.columns]
                     st.plotly_chart(
                         normalized_returns_chart(breadth_df, "SPY vs RSP — Breadth"),
-                        width="stretch",
+                        use_container_width=True,
                     )
 
             with breadth_col2:
@@ -1346,7 +1346,7 @@ def main():
                     ratio_filtered = ratio.loc[start_date:end_date]
                     fig = time_series_chart(ratio_filtered, "SPY/RSP Ratio (Concentration)", yaxis_title="Ratio")
                     fig.add_hline(y=100, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
             if not ratio.empty and len(ratio) >= 22:
                 bm1, bm2, bm3 = st.columns(3)
@@ -1371,7 +1371,7 @@ def main():
                     idx_df.columns = [index_names.get(c, c) for c in idx_df.columns]
                     st.plotly_chart(
                         normalized_returns_chart(idx_df, "Index Performance (Normalized)"),
-                        width="stretch",
+                        use_container_width=True,
                     )
 
             with idx_col2:
@@ -1384,7 +1384,7 @@ def main():
                 if idx_returns:
                     st.plotly_chart(
                         horizontal_bar_chart(idx_returns, "Index Returns (Period)"),
-                        width="stretch",
+                        use_container_width=True,
                     )
             # --- Breadth: % Above 200d MA (Crown signal) ---
             try:
@@ -1413,7 +1413,7 @@ def main():
                         bar_data = {d["Symbol"]: d["% from MA"] for d in b200["detail"]}
                         st.plotly_chart(
                             horizontal_bar_chart(bar_data, "Distance from 200d MA (%)"),
-                            width="stretch",
+                            use_container_width=True,
                         )
 
                     # Historical time series
@@ -1425,7 +1425,7 @@ def main():
                             fig.add_hline(y=80, line_dash="dot", line_color="#22c55e", annotation_text="Strong")
                             fig.add_hline(y=40, line_dash="dot", line_color="#ef4444", annotation_text="Critical")
                             fig.add_hline(y=60, line_dash="dash", line_color="rgba(255,255,255,0.2)")
-                            st.plotly_chart(fig, width="stretch")
+                            st.plotly_chart(fig, use_container_width=True)
             except Exception:
                 pass
 
@@ -1481,7 +1481,7 @@ def main():
             styled = display_df.style.map(_color_cell, subset=value_cols).format(
                 "{:+.1f}%", subset=value_cols, na_rep="—"
             )
-            st.dataframe(styled, width="stretch", height=450)
+            st.dataframe(styled, use_container_width=True, height=450)
 
             sc_col1, sc_col2 = st.columns(2)
             with sc_col1:
@@ -1490,7 +1490,7 @@ def main():
                     if month_rets:
                         st.plotly_chart(
                             horizontal_bar_chart(month_rets, "1-Month Sector Returns"),
-                            width="stretch",
+                            use_container_width=True,
                         )
             with sc_col2:
                 if "YTD" in sec_df.columns:
@@ -1498,7 +1498,7 @@ def main():
                     if ytd_rets:
                         st.plotly_chart(
                             horizontal_bar_chart(ytd_rets, "YTD Sector Returns"),
-                            width="stretch",
+                            use_container_width=True,
                         )
 
     # ============================================================
@@ -1556,7 +1556,7 @@ def main():
                 oil_df.columns = ["WTI Crude", "Brent Crude"]
                 st.plotly_chart(
                     time_series_chart(oil_df, "WTI vs Brent Crude Oil", db=db, yaxis_title="$/barrel"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with oil_col2:
@@ -1565,7 +1565,7 @@ def main():
                 ogr_filtered = ogr.loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(ogr_filtered, "Oil/Gold Ratio (WTI/GLD)", yaxis_title="Ratio"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         # --- Row 2: Metal charts ---
@@ -1576,7 +1576,7 @@ def main():
                 gsr_filtered = gsr.loc[start_date:end_date]
                 st.plotly_chart(
                     time_series_chart(gsr_filtered, "Gold/Silver Ratio", yaxis_title="Ratio"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with metals_col2:
@@ -1588,7 +1588,7 @@ def main():
                         "Real Yields vs Gold",
                         y1_title="Real Rate %", y2_title="GLD Price",
                     ),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         # --- Row 3: Commodity comparisons ---
@@ -1600,7 +1600,7 @@ def main():
                 slv_copx.columns = ["Silver (SLV)", "Copper Miners (COPX)"]
                 st.plotly_chart(
                     normalized_returns_chart(slv_copx, "Silver vs Copper Miners"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with metals_col4:
@@ -1609,7 +1609,7 @@ def main():
                 comm_df.columns = ["Gold", "Silver", "Crude Oil (USO)"]
                 st.plotly_chart(
                     normalized_returns_chart(comm_df, "Commodities Normalized"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
     # Section 11: Cross-Asset Divergence
@@ -1627,7 +1627,7 @@ def main():
                     yaxis_title="Correlation",
                 )
                 fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                st.plotly_chart(fig, width="stretch")
+                st.plotly_chart(fig, use_container_width=True)
 
         with ca_col2:
             sb_df = query_multiple_series(db, ["SPY", "TLT"], start=start_date, end=end_date)
@@ -1635,7 +1635,7 @@ def main():
                 sb_df.columns = ["S&P 500", "20Y+ Treasury"]
                 st.plotly_chart(
                     normalized_returns_chart(sb_df, "Stocks vs Bonds"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         ca_col3, ca_col4 = st.columns(2)
@@ -1648,7 +1648,7 @@ def main():
                         hi_spread.loc[start_date:end_date], "HY-IG OAS Spread",
                         db=db, yaxis_title="bps",
                     ),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with ca_col4:
@@ -1657,7 +1657,7 @@ def main():
                 credit_df.columns = ["High Yield", "Inv. Grade", "20Y+ Treasury"]
                 st.plotly_chart(
                     normalized_returns_chart(credit_df, "Credit & Duration ETFs"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
     # Section 12: COT Positioning
@@ -1694,7 +1694,7 @@ def main():
                     "Z-Score": f"{badge} {row['Z-Score']:+.2f}",
                     "Direction": row["Direction"],
                 })
-            st.dataframe(pd.DataFrame(display_rows), hide_index=True, width="stretch")
+            st.dataframe(pd.DataFrame(display_rows), hide_index=True, use_container_width=True)
 
             # Row 2: S&P 500 and Nasdaq positioning charts
             cot_col1, cot_col2 = st.columns(2)
@@ -1705,7 +1705,7 @@ def main():
                     es_pct.name = "Net % of OI"
                     fig = time_series_chart(es_pct, "S&P 500 Futures — Net Speculator %", yaxis_title="% of OI")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
             with cot_col2:
                 nq_pct = query_series(db, "COT_NQ_PCT")
@@ -1713,7 +1713,7 @@ def main():
                     nq_pct.name = "Net % of OI"
                     fig = time_series_chart(nq_pct, "Nasdaq 100 Futures — Net Speculator %", yaxis_title="% of OI")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
             # Row 3: Gold and Crude Oil positioning
             cot_col3, cot_col4 = st.columns(2)
@@ -1724,7 +1724,7 @@ def main():
                     gc_pct.name = "Net % of OI"
                     fig = time_series_chart(gc_pct, "Gold Futures — Net Speculator %", yaxis_title="% of OI")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
             with cot_col4:
                 cl_pct = query_series(db, "COT_CL_PCT")
@@ -1732,7 +1732,7 @@ def main():
                     cl_pct.name = "Net % of OI"
                     fig = time_series_chart(cl_pct, "Crude Oil Futures — Net Speculator %", yaxis_title="% of OI")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
             # Row 4: Multi-contract comparison (normalized)
             all_pct = {}
@@ -1752,7 +1752,7 @@ def main():
                     fig.add_hline(y=2, line_dash="dot", line_color="#ef4444", annotation_text="Extreme Long")
                     fig.add_hline(y=-2, line_dash="dot", line_color="#22c55e", annotation_text="Extreme Short")
                     fig.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-                    st.plotly_chart(fig, width="stretch")
+                    st.plotly_chart(fig, use_container_width=True)
 
     # Section: ETF Flows
     _anchor("etf_flows")
@@ -1791,7 +1791,7 @@ def main():
                     template="plotly_dark",
                     height=350,
                 )
-                st.plotly_chart(cat_fig, width="stretch")
+                st.plotly_chart(cat_fig, use_container_width=True)
 
             # Per-ETF flow table
             st.subheader("ETF Dollar Volume Activity")
@@ -1809,7 +1809,7 @@ def main():
             display["vs Avg (%)"] = display["vs Avg (%)"].apply(
                 lambda v: f"{'🟢' if v > 0 else '🔴'} {v:+.1f}%"
             )
-            st.dataframe(display, width="stretch", hide_index=True)
+            st.dataframe(display, use_container_width=True, hide_index=True)
 
             # Cumulative flow chart for top ETFs
             st.subheader("Cumulative Flows")
@@ -1828,7 +1828,7 @@ def main():
                     if not eq_df.empty:
                         st.plotly_chart(
                             time_series_chart(eq_df, "US Equity ETF Cumulative Flows ($M)"),
-                            width="stretch",
+                            use_container_width=True,
                         )
 
             with flow_cols[1]:
@@ -1842,7 +1842,7 @@ def main():
                     if not bd_df.empty:
                         st.plotly_chart(
                             time_series_chart(bd_df, "Fixed Income ETF Cumulative Flows ($M)"),
-                            width="stretch",
+                            use_container_width=True,
                         )
 
     # Section 13: Geographic Rotation
@@ -1857,7 +1857,7 @@ def main():
                 geo_df.columns = ["US (SPY)", "Developed ex-US (EFA)", "Emerging (EEM)"]
                 st.plotly_chart(
                     normalized_returns_chart(geo_df, "US vs Developed vs Emerging"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with geo_col2:
@@ -1866,7 +1866,7 @@ def main():
                 eu_df.columns = ["Europe (VGK)", "Developed ex-US (EFA)"]
                 st.plotly_chart(
                     normalized_returns_chart(eu_df, "European Focus"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         geo_col3, geo_col4 = st.columns(2)
@@ -1880,7 +1880,7 @@ def main():
             if geo_rets:
                 st.plotly_chart(
                     horizontal_bar_chart(geo_rets, "Geographic Returns (Period)"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with geo_col4:
@@ -1889,7 +1889,7 @@ def main():
                 def_df.columns = ["Aerospace & Defense (ITA)", "S&P 500 (SPY)"]
                 st.plotly_chart(
                     normalized_returns_chart(def_df, "Defense vs S&P 500"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
     # Section 13: AI & Tech Sub-sectors
@@ -1904,7 +1904,7 @@ def main():
                 tech_df.columns = ["Nasdaq 100 (QQQ)", "Software (IGV)", "Semis (SOXX)"]
                 st.plotly_chart(
                     normalized_returns_chart(tech_df, "QQQ vs Software vs Semiconductors"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         with tech_col2:
@@ -1913,7 +1913,7 @@ def main():
                 nvda_df.columns = ["NVIDIA", "Nasdaq 100 (QQQ)"]
                 st.plotly_chart(
                     normalized_returns_chart(nvda_df, "NVIDIA vs QQQ"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
         tech_rets = {}
@@ -1925,7 +1925,7 @@ def main():
         if tech_rets:
             st.plotly_chart(
                 horizontal_bar_chart(tech_rets, "Tech Sub-sector Returns (Period)"),
-                width="stretch",
+                use_container_width=True,
             )
 
     # ============================================================
@@ -1945,7 +1945,7 @@ def main():
                 dxy.name = "DXY"
                 st.plotly_chart(
                     time_series_chart(dxy, "US Dollar Index (DXY)", yaxis_title="Index"),
-                    width="stretch",
+                    use_container_width=True,
                 )
 
             with ccy_col2:
@@ -1974,14 +1974,14 @@ def main():
 
                 if ccy_rows:
                     st.subheader("Currency Strength vs USD")
-                    st.dataframe(pd.DataFrame(ccy_rows), hide_index=True, width="stretch")
+                    st.dataframe(pd.DataFrame(ccy_rows), hide_index=True, use_container_width=True)
 
             btc = query_series(db, "BTC-USD", start=start_date, end=end_date)
             if not btc.empty:
                 btc.name = "BTC/USD"
                 st.plotly_chart(
                     time_series_chart(btc, "Bitcoin", yaxis_title="USD"),
-                    width="stretch",
+                    use_container_width=True,
                 )
         else:
             st.info("No currency data loaded. Click **Refresh Market Data** in the sidebar.")
@@ -2023,7 +2023,7 @@ def main():
                     with sent_col1:
                         st.plotly_chart(
                             gauge_chart(sent["overall_score"], "Reddit Sentiment", sent["label"]),
-                            width="stretch",
+                            use_container_width=True,
                         )
                     with sent_col2:
                         if sent["subreddit_scores"]:
@@ -2042,7 +2042,7 @@ def main():
                             fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
                             fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
                             fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
-                            st.plotly_chart(fig, width="stretch")
+                            st.plotly_chart(fig, use_container_width=True)
 
                     if settings.sentiment:
                         ranking = ticker_sentiment_ranking(
@@ -2051,7 +2051,7 @@ def main():
                         )
                         if not ranking.empty:
                             st.subheader("Reddit Ticker Ranking")
-                            st.dataframe(ranking, hide_index=True, width="stretch")
+                            st.dataframe(ranking, hide_index=True, use_container_width=True)
 
                             top_ticker = ranking.iloc[0]["Ticker"]
                             svp = sentiment_vs_price(
@@ -2065,7 +2065,7 @@ def main():
                                         f"{top_ticker}: Reddit Sentiment vs Price",
                                         y1_title="Sentiment Score", y2_title="Price ($)",
                                     ),
-                                    width="stretch",
+                                    use_container_width=True,
                                 )
                 tab_idx += 1
 
@@ -2076,7 +2076,7 @@ def main():
                     with st_col1:
                         st.plotly_chart(
                             gauge_chart(st_sent["overall_score"], "StockTwits Sentiment", st_sent["label"]),
-                            width="stretch",
+                            use_container_width=True,
                         )
                     with st_col2:
                         st.metric("Overall Score", f"{st_sent['overall_score']:.1f}")
@@ -2093,7 +2093,7 @@ def main():
                             fig.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.3)")
                             fig.add_hline(y=70, line_dash="dot", line_color="#22c55e", annotation_text="Bullish")
                             fig.add_hline(y=30, line_dash="dot", line_color="#ef4444", annotation_text="Bearish")
-                            st.plotly_chart(fig, width="stretch")
+                            st.plotly_chart(fig, use_container_width=True)
 
                     if st_sent["symbol_scores"]:
                         st.subheader("StockTwits Per-Symbol Sentiment")
@@ -2106,7 +2106,7 @@ def main():
                                 "Messages": data["msg_count"],
                                 "7d Chg": f"{data['change_7d']:+.1f}" if data["change_7d"] else "—",
                             })
-                        st.dataframe(pd.DataFrame(st_rows), hide_index=True, width="stretch")
+                        st.dataframe(pd.DataFrame(st_rows), hide_index=True, use_container_width=True)
                 tab_idx += 1
 
             # Combined tab
@@ -2121,7 +2121,7 @@ def main():
 
                     st.plotly_chart(
                         gauge_chart(blended, "Combined Social Sentiment", bl_label),
-                        width="stretch",
+                        use_container_width=True,
                     )
 
                     cmp_cols = st.columns(2)

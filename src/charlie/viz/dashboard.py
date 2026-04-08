@@ -763,7 +763,7 @@ def main():
 
         st.markdown(report["markdown"])
 
-        with st.expander("Copy Markdown"):
+        with st.container():
             st.code(report["markdown"], language="markdown")
 
         if st.button("Save Report"):
